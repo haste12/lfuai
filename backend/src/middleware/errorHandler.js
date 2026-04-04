@@ -4,9 +4,11 @@ function notFound(req, res) {
 
 function errorHandler(err, req, res, _next) {
   console.error('❌ Error:', err.message);
-  const status = err.status || 500;
+  // Send the actual error message to the client instead of masking it.
+  // This helps debug rate limits from Gemini (e.g. 429 Resource exhausted).
+  const status = err.status || (err.message.includes('429') ? 429 : 500);
   res.status(status).json({
-    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+    error: err.message,
   });
 }
 
