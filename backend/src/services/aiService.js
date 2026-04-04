@@ -110,7 +110,10 @@ async function getAIResponse(message, userName, history = []) {
     } catch (err) {
       console.warn(`[AI] Model ${modelName} failed:`, err.message);
       lastError = err;
-      if (!err.message.includes('503')) break;
+      // Fallback to the next model if the service is overloaded (503) or rate-limited (429)
+      if (!err.message.includes('503') && !err.message.includes('429') && !err.message.includes('Quota')) {
+        break;
+      }
     }
   }
 
