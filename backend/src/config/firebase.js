@@ -23,7 +23,7 @@ function getDb() {
       console.log('✅ Firebase: loaded from serviceAccountKey.json');
     } else {
       // Option 2: individual environment variables
-      const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+      const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n').replace(/\r/g, '');
       const serviceAccount = {
         type: 'service_account',
         project_id: process.env.FIREBASE_PROJECT_ID,
