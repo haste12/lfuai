@@ -7,7 +7,6 @@ import styles from './Navbar.module.css';
 
 const NAV_LINKS = [
   { href: '/chat', label: 'AI Chat' },
-  { href: '/about', label: 'About LFU' },
 ];
 
 export default function Navbar() {
