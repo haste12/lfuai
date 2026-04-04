@@ -3,7 +3,7 @@ import { AuthProvider } from '../context/AuthContext';
 
 export const metadata = {
   title: 'LFU AI Assistant',
-  description: 'The official AI assistant of Lebanese French University — powered by OpenAI.',
+  description: 'The official AI assistant of Lebanese French University.',
   keywords: ['LFU', 'AI', 'university', 'chatbot', 'Lebanese French University'],
   openGraph: {
     title: 'LFU AI Assistant',

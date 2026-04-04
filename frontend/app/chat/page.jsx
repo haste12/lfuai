@@ -372,8 +372,7 @@ export default function ChatPage() {
             <div>
               <p className={styles.headerTitle}>LFU AI Assistant</p>
               <p className={styles.headerSub}>
-                <span className={styles.onlineDot} /> Online — powered by Gemini
-                AI
+                <span className={styles.onlineDot} /> Online
               </p>
             </div>
           </div>
