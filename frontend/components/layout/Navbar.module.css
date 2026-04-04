@@ -1,0 +1,135 @@
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: rgba(8, 12, 20, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+}
+
+.inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 68px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  transition: opacity var(--transition);
+}
+.logo:hover { opacity: 0.85; }
+
+.logoIcon {
+  font-size: 22px;
+  color: var(--primary);
+}
+
+.links {
+  display: flex;
+  list-style: none;
+  gap: 4px;
+}
+
+.link {
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: all var(--transition);
+}
+.link:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.active {
+  color: var(--primary-light) !important;
+  background: rgba(124, 106, 247, 0.12) !important;
+}
+
+.auth {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.userInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-ring 2s infinite;
+  flex-shrink: 0;
+}
+
+/* Mobile */
+.burger {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px;
+}
+
+.burgerBar {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--text-muted);
+  border-radius: 2px;
+  transition: all var(--transition);
+}
+
+.mobileMenu {
+  display: none;
+  flex-direction: column;
+  padding: 12px 24px 20px;
+  border-top: 1px solid var(--border);
+  background: rgba(8, 12, 20, 0.98);
+  animation: fadeIn 0.2s ease;
+}
+
+.mobileLink {
+  padding: 12px 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  transition: color var(--transition);
+  background: none;
+  text-align: left;
+}
+.mobileLink:hover { color: var(--text); }
+
+.mobileCta { margin-top: 16px; width: 100%; justify-content: center; }
+
+@media (max-width: 768px) {
+  .links { display: none; }
+  .auth { display: none; }
+  .burger { display: flex; }
+  .mobileMenu { display: flex; }
+}
