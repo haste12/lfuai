@@ -1,4 +1,5 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const OpenAI = require('openai');
+const { searchWeb, needsWebSearch } = require('./searchService');
 const {
   SYSTEM_PROMPT,
   getGreetingResponse,
@@ -9,25 +10,27 @@ const {
   REPLACEMENTS,
 } = require('../data/prompts');
 
-// Lazy singleton
-let _genAI = null;
-function getGenAI() {
-  if (!_genAI) {
-    if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.includes('your_gemini')) {
-      throw new Error('GEMINI_API_KEY is not set in your .env file.');
+// ── Lazy singleton ────────────────────────────────────────────────────────────
+let _hfClient = null;
+function getHFClient() {
+  if (!_hfClient) {
+    if (!process.env.HUGGINGFACE_API_TOKEN || process.env.HUGGINGFACE_API_TOKEN.includes('YOUR_TOKEN')) {
+      throw new Error('HUGGINGFACE_API_TOKEN is not set in your .env file. Get one at https://huggingface.co/settings/tokens');
     }
-    _genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    _hfClient = new OpenAI({
+      apiKey: process.env.HUGGINGFACE_API_TOKEN,
+      baseURL: 'https://router.huggingface.co/v1',
+    });
   }
-  return _genAI;
+  return _hfClient;
 }
 
+// ── Predefined short-circuit responses ───────────────────────────────────────
 function getPredefinedResponse(message, userName) {
   const lower = message.toLowerCase().trim();
-
   if (GREETINGS.has(lower)) return getGreetingResponse(userName);
   if (CREATOR_TRIGGERS.some((t) => lower.includes(t))) return CREATOR_RESPONSE;
   if (lower.includes('president of lebanese french university')) return PRESIDENT_RESPONSE;
-
   return null;
 }
 
@@ -39,85 +42,63 @@ function applyReplacements(text) {
   return result;
 }
 
+// ── Main AI call ──────────────────────────────────────────────────────────────
 async function getAIResponse(message, userName, history = []) {
   const predefined = getPredefinedResponse(message, userName);
   if (predefined) return predefined;
 
-  // Build clean alternating history for Gemini's startChat API
-  // Skip the welcome message and any messages without text
-  const rawHistory = [];
-  if (Array.isArray(history)) {
-    for (const msg of history) {
-      if (!msg.text || msg.id === 'welcome') continue;
-      const role = msg.role === 'bot' ? 'model' : 'user';
-      rawHistory.push({ role, parts: [{ text: msg.text }] });
-    }
-  }
+  const contextInstruction =
+    '\n\nIMPORTANT: Always maintain full conversation context. When the user says something vague like "more", "continue", "go on", or asks a follow-up question, always refer back to the previous messages in this conversation and continue from where you left off. Never lose track of what was previously discussed.';
 
-  // Gemini requires history to start with 'user' and strictly alternate user/model
-  while (rawHistory.length > 0 && rawHistory[0].role !== 'user') {
-    rawHistory.shift();
-  }
-
-  // Merge consecutive same-role turns
-  const chatHistory = [];
-  for (const turn of rawHistory) {
-    const last = chatHistory[chatHistory.length - 1];
-    if (last && last.role === turn.role) {
-      last.parts[0].text += '\n' + turn.parts[0].text;
-    } else {
-      chatHistory.push({ role: turn.role, parts: [{ text: turn.parts[0].text }] });
-    }
-  }
-
-  // Gemini's startChat history must end with 'model' turn
-  // The current user message is sent separately via chat.sendMessage()
-  while (chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role !== 'model') {
-    chatHistory.pop();
-  }
-
-  const genAI = getGenAI();
-  const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-2.5-pro'];
-
-  const contextInstruction = '\n\nIMPORTANT: Always maintain full conversation context. When the user says something vague like "more", "continue", "go on", or asks a follow-up question, always refer back to the previous messages in this conversation and continue from where you left off. Never lose track of what was previously discussed.';
-
-  const customizedSystemPrompt = userName
+  const systemContent = userName
     ? SYSTEM_PROMPT + `\n\nThe user's name is ${userName}. Address them by name occasionally.` + contextInstruction
     : SYSTEM_PROMPT + contextInstruction;
 
-  let lastError;
-  for (const modelName of modelsToTry) {
-    try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        systemInstruction: customizedSystemPrompt,
-      });
+  // Build messages array in OpenAI chat format
+  const messages = [{ role: 'system', content: systemContent }];
 
-      // Use startChat() with history for proper multi-turn conversation memory
-      const chat = model.startChat({
-        history: chatHistory,
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 800,
-        },
-      });
-
-      // Send current message into the live chat session
-      const result = await chat.sendMessage(message);
-      const reply = result.response.text();
-      return applyReplacements(reply);
-
-    } catch (err) {
-      console.warn(`[AI] Model ${modelName} failed:`, err.message);
-      lastError = err;
-      // Fallback to the next model if the service is overloaded (503) or rate-limited (429)
-      if (!err.message.includes('503') && !err.message.includes('429') && !err.message.includes('Quota')) {
-        break;
-      }
+  if (Array.isArray(history)) {
+    for (const msg of history) {
+      if (!msg.text || msg.id === 'welcome') continue;
+      const role = msg.role === 'bot' ? 'assistant' : 'user';
+      messages.push({ role, content: msg.text });
     }
   }
 
-  throw lastError || new Error('All AI models are currently overloaded. Please try again later.');
+  // Add the current user message
+  messages.push({ role: 'user', content: message });
+
+  // ── Web search (if query needs live data) ──────────────────────────────────
+  if (needsWebSearch(message)) {
+    console.log('[Search] Fetching web results for:', message);
+    const searchResults = await searchWeb(message);
+    if (searchResults) {
+      // Inject search results as an assistant context hint before the final user message
+      messages.splice(messages.length - 1, 0, {
+        role: 'system',
+        content: `🌐 Web search results for context (use this to answer accurately):\n\n${searchResults}\n\nUse the above search results to answer the user's question accurately. Always mention if you used web search data.`,
+      });
+      console.log('[Search] Results injected into context.');
+    }
+  }
+
+  const client = getHFClient();
+  const modelId = process.env.HUGGINGFACE_MODEL || 'meta-llama/Llama-3.1-8B-Instruct:novita';
+
+  try {
+    const completion = await client.chat.completions.create({
+      model: modelId,
+      messages,
+      temperature: 0.7,
+      max_tokens: 800,
+    });
+
+    const reply = completion.choices[0]?.message?.content ?? '';
+    return applyReplacements(reply.trim());
+  } catch (err) {
+    console.error('[AI] Hugging Face request failed:', err.message);
+    throw new Error('The AI model is currently unavailable. Please try again later.');
+  }
 }
 
 module.exports = { getAIResponse };
