@@ -1,0 +1,328 @@
+/* ─── Overlay ─────────────────────────────────────────────────────────────── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 20px;
+}
+
+/* Ambient orbs */
+.orb1 {
+  position: fixed;
+  top: -10%;
+  left: -10%;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(108,99,255,0.25) 0%, transparent 70%);
+  pointer-events: none;
+  animation: floatOrb 8s ease-in-out infinite;
+}
+.orb2 {
+  position: fixed;
+  bottom: -10%;
+  right: -10%;
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(6,214,160,0.2) 0%, transparent 70%);
+  pointer-events: none;
+  animation: floatOrb 10s ease-in-out infinite reverse;
+}
+@keyframes floatOrb {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-30px); }
+}
+
+/* ─── Modal Card ──────────────────────────────────────────────────────────── */
+.modal {
+  background: var(--modal-bg, #ffffff);
+  border-radius: 28px;
+  padding: 44px 40px 36px;
+  width: 100%;
+  max-width: 500px;
+  border: 1px solid var(--modal-border, rgba(0,0,0,0.08));
+  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(108,99,255,0.1);
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.modalIn {
+  animation: modalEnter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+.modalOut {
+  animation: modalExit 0.25s ease forwards;
+}
+
+@keyframes modalEnter {
+  from { opacity: 0; transform: scale(0.92) translateY(20px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+@keyframes modalExit {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.95); }
+}
+
+/* ─── Logo ────────────────────────────────────────────────────────────────── */
+.logoWrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #6c63ff, #4f46e5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(108,99,255,0.4);
+}
+
+.logoText {
+  font-size: 22px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #6c63ff, #4f46e5);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.02em;
+}
+
+/* ─── Step Content ────────────────────────────────────────────────────────── */
+.stepContent {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--modal-text, #0f172a);
+  text-align: center;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--modal-muted, #64748b);
+  text-align: center;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+/* ─── Language Grid ───────────────────────────────────────────────────────── */
+.langGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.langCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 8px;
+  background: var(--modal-surface, #f8fafc);
+  border: 2px solid var(--modal-border, #e2e8f0);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  position: relative;
+  color: var(--modal-text, #0f172a);
+  min-height: 72px;
+  justify-content: center;
+}
+
+.langCard:hover {
+  border-color: #6c63ff;
+  background: rgba(108,99,255,0.05);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(108,99,255,0.15);
+}
+
+.langCardActive {
+  border-color: #6c63ff !important;
+  background: rgba(108,99,255,0.08) !important;
+  box-shadow: 0 0 0 3px rgba(108,99,255,0.15);
+}
+
+.langNative {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--modal-text, #0f172a);
+  letter-spacing: -0.01em;
+}
+
+.langLabel {
+  font-size: 11px;
+  color: var(--modal-muted, #94a3b8);
+  font-weight: 500;
+}
+
+.checkMark {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #6c63ff;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── Step 2 Intro ────────────────────────────────────────────────────────── */
+.introIcon {
+  width: 88px;
+  height: 88px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(108,99,255,0.1), rgba(6,214,160,0.1));
+  border: 1px solid rgba(108,99,255,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  box-shadow: 0 0 40px rgba(108,99,255,0.15);
+}
+
+.introBody {
+  font-size: 15px;
+  color: var(--modal-muted, #475569);
+  text-align: center;
+  line-height: 1.75;
+  margin: 8px 0;
+  max-width: 380px;
+}
+
+.introSub {
+  font-size: 12px;
+  color: var(--modal-faint, #94a3b8);
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+/* Feature chips */
+.featureRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.featureChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--modal-surface, #f1f5f9);
+  border: 1px solid var(--modal-border, #e2e8f0);
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--modal-text, #334155);
+}
+
+/* Action buttons */
+.actionRow {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 20px;
+  background: var(--modal-surface, #f1f5f9);
+  border: 1px solid var(--modal-border, #e2e8f0);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--modal-muted, #64748b);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+.backBtn:hover {
+  background: var(--modal-border, #e2e8f0);
+  color: var(--modal-text, #334155);
+}
+
+.startBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 24px;
+  background: linear-gradient(135deg, #6c63ff, #4f46e5);
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  box-shadow: 0 6px 20px rgba(108,99,255,0.35);
+}
+.startBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(108,99,255,0.5);
+}
+.startBtn:active { transform: scale(0.98); }
+
+/* ─── Step Dots ───────────────────────────────────────────────────────────── */
+.dots {
+  display: flex;
+  gap: 6px;
+  margin-top: 16px;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--modal-border, #e2e8f0);
+  transition: all 0.3s ease;
+}
+.dotActive {
+  background: #6c63ff;
+  width: 20px;
+}
+
+/* ─── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .modal { padding: 32px 20px 28px; }
+  .langGrid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .langCard { padding: 14px 8px; }
+  .langFlag { font-size: 22px; }
+  .langNative { font-size: 13px; }
+  .title { font-size: 19px; }
+}

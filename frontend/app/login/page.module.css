@@ -1,12 +1,12 @@
 .main {
   min-height: 100vh;
-  padding-top: 68px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 100px 24px 60px;
+  padding: 40px 20px;
   position: relative;
   z-index: 1;
+  background: var(--bg);
 }
 
 .card {
@@ -14,28 +14,38 @@
   max-width: 420px;
   background: var(--bg-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  padding: 40px;
-  animation: fadeIn 0.4s ease;
+  border-radius: 28px;
+  padding: 44px 40px 36px;
+  box-shadow: var(--shadow);
+  animation: cardIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transition: background 0.3s ease;
 }
 
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+/* ─── Card Header ─────────────────────────────────────────────────────────── */
 .cardHeader {
   text-align: center;
   margin-bottom: 32px;
 }
 
-.logo {
-  display: inline-block;
-  font-size: 36px;
-  color: var(--primary);
-  margin-bottom: 16px;
+.logoWrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 18px;
+  filter: drop-shadow(0 8px 24px rgba(108,99,255,0.3));
 }
 
 .title {
   font-family: var(--font-display);
   font-size: 26px;
-  font-weight: 700;
-  margin-bottom: 8px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 6px;
+  letter-spacing: -0.02em;
 }
 
 .subtitle {
@@ -43,33 +53,41 @@
   color: var(--text-muted);
 }
 
+/* ─── Error ───────────────────────────────────────────────────────────────── */
 .errorBox {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 12px;
   padding: 12px 16px;
   font-size: 13px;
-  color: #fca5a5;
+  color: #ef4444;
   margin-bottom: 20px;
   text-align: center;
+  justify-content: center;
 }
 
+/* ─── Form ────────────────────────────────────────────────────────────────── */
 .form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
 }
 
 .label {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .submitBtn {
@@ -77,9 +95,37 @@
   justify-content: center;
   padding: 14px;
   font-size: 15px;
+  font-weight: 700;
+  border-radius: 12px;
   margin-top: 4px;
 }
 
+/* Google button */
+.googleBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 13px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+.googleBtn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+.googleBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ─── Footer ──────────────────────────────────────────────────────────────── */
 .footer {
   text-align: center;
   margin-top: 24px;
@@ -88,12 +134,12 @@
 }
 
 .link {
-  color: var(--primary-light);
-  font-weight: 500;
+  color: var(--primary);
+  font-weight: 600;
 }
 .link:hover { text-decoration: underline; }
 
-/* Success state */
+/* Success */
 .successBox {
   text-align: center;
   display: flex;
@@ -106,3 +152,7 @@
 .successBox h2 { font-size: 22px; font-weight: 700; }
 .successBox p { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
 .redirect { font-size: 12px; color: var(--text-faint); }
+
+@media (max-width: 480px) {
+  .card { padding: 32px 24px 28px; border-radius: 20px; }
+}

@@ -11,18 +11,17 @@ const {
 } = require('../data/prompts');
 
 // ── Lazy singleton ────────────────────────────────────────────────────────────
-let _hfClient = null;
-function getHFClient() {
-  if (!_hfClient) {
-    if (!process.env.HUGGINGFACE_API_TOKEN || process.env.HUGGINGFACE_API_TOKEN.includes('YOUR_TOKEN')) {
-      throw new Error('HUGGINGFACE_API_TOKEN is not set in your .env file. Get one at https://huggingface.co/settings/tokens');
+let _openaiClient = null;
+function getOpenAIClient() {
+  if (!_openaiClient) {
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.includes('YOUR_KEY')) {
+      throw new Error('OPENAI_API_KEY is not set in your .env file. Get one at https://platform.openai.com/api-keys');
     }
-    _hfClient = new OpenAI({
-      apiKey: process.env.HUGGINGFACE_API_TOKEN,
-      baseURL: 'https://router.huggingface.co/v1',
+    _openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
     });
   }
-  return _hfClient;
+  return _openaiClient;
 }
 
 // ── Predefined short-circuit responses ───────────────────────────────────────
@@ -82,8 +81,8 @@ async function getAIResponse(message, userName, history = []) {
     }
   }
 
-  const client = getHFClient();
-  const modelId = process.env.HUGGINGFACE_MODEL || 'meta-llama/Llama-3.1-8B-Instruct:novita';
+  const client = getOpenAIClient();
+  const modelId = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
   try {
     const completion = await client.chat.completions.create({
@@ -96,7 +95,7 @@ async function getAIResponse(message, userName, history = []) {
     const reply = completion.choices[0]?.message?.content ?? '';
     return applyReplacements(reply.trim());
   } catch (err) {
-    console.error('[AI] Hugging Face request failed:', err.message);
+    console.error('[AI] OpenAI request failed:', err.message);
     throw new Error('The AI model is currently unavailable. Please try again later.');
   }
 }

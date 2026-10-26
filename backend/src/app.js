@@ -12,7 +12,16 @@ const app = express();
 // ─── Security & Middleware ────────────────────────────────────────────────────
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    // Allow any localhost port in development
+    if (/^http:\/\/localhost:\d+$/.test(origin)) return callback(null, true);
+    // Allow configured frontend URL in production
+    const allowed = process.env.FRONTEND_URL;
+    if (allowed && origin === allowed) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }));

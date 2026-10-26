@@ -1,5 +1,7 @@
 import '../styles/globals.css';
 import { AuthProvider } from '../context/AuthContext';
+import { ThemeProvider } from '../context/ThemeContext';
+import { LanguageProvider } from '../context/LanguageContext';
 
 export const metadata = {
   title: 'LFU AI Assistant',
@@ -14,11 +16,15 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="light">
       <body>
         <AuthProvider>
-          <div className="grid-bg" aria-hidden="true" />
-          {children}
+          <ThemeProvider>
+            <LanguageProvider>
+              <div className="grid-bg" aria-hidden="true" />
+              {children}
+            </LanguageProvider>
+          </ThemeProvider>
         </AuthProvider>
       </body>
     </html>
