@@ -309,7 +309,7 @@ export default function ChatPage() {
   const [error, setError] = useState("");
 
   // Conversation action state
-  const [contextMenu, setContextMenu] = useState({ open: false, chatId: null, x: 0, y: 0 });
+  const [contextMenu, setContextMenu] = useState({ open: false, chatId: null, top: 0, left: 0 });
   const [renaming, setRenaming] = useState({ chatId: null, value: "" });
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, chatId: null });
 
@@ -320,6 +320,7 @@ export default function ChatPage() {
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
   const guestSessionId = useRef(null);
+  const menuBtnRefs = useRef({});
 
   // ─── Mount ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -383,11 +384,7 @@ export default function ChatPage() {
   };
 
   // ─── Close context menu on outside click ──────────────────────────────────
-  useEffect(() => {
-    const handler = () => setContextMenu(m => ({ ...m, open: false }));
-    document.addEventListener("click", handler);
-    return () => document.removeEventListener("click", handler);
-  }, []);
+  // (handled by backdrop overlay rendered when menu is open — see JSX)
 
   // ─── Send message ─────────────────────────────────────────────────────────
   const sendMessage = useCallback(async (overrideText) => {
@@ -493,12 +490,37 @@ export default function ChatPage() {
     setMessages(chat.messages || []);
     setError("");
     setSidebarOpen(false);
+    setContextMenu({ open: false, chatId: null, top: 0, left: 0 });
   };
 
   // ─── Rename conversation ──────────────────────────────────────────────────
   const startRename = (chatId, currentTitle) => {
     setRenaming({ chatId, value: currentTitle });
     setContextMenu(m => ({ ...m, open: false }));
+  };
+
+  // ─── Open options context menu ────────────────────────────────────────────
+  const openContextMenu = (e, chatId) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    // Toggle: clicking the same button closes the menu
+    if (contextMenu.open && contextMenu.chatId === chatId) {
+      setContextMenu({ open: false, chatId: null, top: 0, left: 0 });
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuHeight = 84;
+    const menuWidth = 150;
+
+    const fitsBelow = rect.bottom + menuHeight <= window.innerHeight - 10;
+    const top = fitsBelow ? rect.bottom + 4 : Math.max(10, rect.top - menuHeight - 4);
+    let left = rect.right - menuWidth;
+    if (left < 8) left = 8;
+    if (left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
+
+    setContextMenu({ open: true, chatId, top, left });
   };
 
   const commitRename = async () => {
@@ -610,6 +632,47 @@ export default function ChatPage() {
       />
       <SettingsPanel isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
+      {/* Chat Options Context Menu — backdrop closes on outside click */}
+      {contextMenu.open && (
+        <>
+          {/* Transparent backdrop — click it to close the menu */}
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 999 }}
+            onClick={() => setContextMenu({ open: false, chatId: null, top: 0, left: 0 })}
+          />
+          {/* The actual dropdown */}
+          <div
+            className={styles.contextMenu}
+            style={{
+              position: "fixed",
+              top: `${contextMenu.top}px`,
+              left: `${contextMenu.left}px`,
+              zIndex: 1000,
+            }}
+          >
+            <button
+              type="button"
+              className={styles.contextMenuItem}
+              onClick={() => {
+                const targetChat = chats.find(c => c.id === contextMenu.chatId);
+                startRename(contextMenu.chatId, targetChat?.title || "");
+              }}
+            >
+              <EditIcon />
+              <span>{t.rename}</span>
+            </button>
+            <button
+              type="button"
+              className={`${styles.contextMenuItem} ${styles.contextMenuItemDanger}`}
+              onClick={() => confirmDelete(contextMenu.chatId)}
+            >
+              <TrashIcon />
+              <span>{t.delete}</span>
+            </button>
+          </div>
+        </>
+      )}
+
       <div className={styles.layout}>
         {/* Sidebar overlay (mobile) */}
         {sidebarOpen && (
@@ -663,22 +726,26 @@ export default function ChatPage() {
                           />
                         </form>
                       ) : (
-                        <button
+                        <div
                           className={`${styles.chatItem} ${chat.id === activeChatId ? styles.chatItemActive : ""}`}
                           onClick={() => loadChat(chat.id)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") loadChat(chat.id); }}
                         >
                           <ChatIcon />
                           <span className={styles.chatTitle}>{chat.title || t.newChat}</span>
                           <button
-                            className={styles.chatMenuBtn}
-                            onClick={e => {
-                              e.stopPropagation();
-                              setContextMenu({ open: true, chatId: chat.id, x: e.clientX, y: e.clientY });
-                            }}
+                            type="button"
+                            ref={el => { menuBtnRefs.current[chat.id] = el; }}
+                            className={`${styles.chatMenuBtn} ${contextMenu.open && contextMenu.chatId === chat.id ? styles.chatMenuBtnActive : ""}`}
+                            onClick={e => openContextMenu(e, chat.id)}
+                            title={t.rename + " / " + t.delete}
+                            aria-label="Chat options"
                           >
                             <MoreIcon />
                           </button>
-                        </button>
+                        </div>
                       )}
                     </div>
                   ))}
@@ -734,32 +801,6 @@ export default function ChatPage() {
           </div>
         </aside>
 
-        {/* Context menu */}
-        {contextMenu.open && (
-          <div
-            className={styles.contextMenu}
-            style={{ top: Math.min(contextMenu.y, window.innerHeight - 100), left: Math.min(contextMenu.x, window.innerWidth - 160) }}
-            onClick={e => e.stopPropagation()}
-          >
-            <button
-              className={styles.contextMenuItem}
-              onClick={() => {
-                const chat = chats.find(c => c.id === contextMenu.chatId);
-                startRename(contextMenu.chatId, chat?.title || "");
-              }}
-            >
-              <EditIcon />
-              <span>{t.rename}</span>
-            </button>
-            <button
-              className={`${styles.contextMenuItem} ${styles.contextMenuItemDanger}`}
-              onClick={() => confirmDelete(contextMenu.chatId)}
-            >
-              <TrashIcon />
-              <span>{t.delete}</span>
-            </button>
-          </div>
-        )}
 
         {/* ─── Main Chat Area ──────────────────────────────────────────────── */}
         <div className={styles.chatArea}>
