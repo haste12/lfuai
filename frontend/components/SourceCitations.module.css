@@ -1,27 +1,37 @@
 /* SourceCitations.module.css */
 
 .sourcesContainer {
-  margin-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 12px;
+  margin-top: 10px;
 }
 
-.sourcesHeader {
-  display: flex;
+/* Toggle button */
+.toggleBtn {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.72rem;
-  font-weight: 600;
+  gap: 5px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 20px;
+  cursor: pointer;
   color: var(--text-muted, #8e8ea0);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 8px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
+.toggleBtn:hover {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: var(--accent, #6366f1);
+}
+
+/* Sources list */
 .sourcesList {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
+  margin-top: 8px;
 }
 
 .sourceItem {
@@ -29,18 +39,17 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px;
-  background: rgba(99, 102, 241, 0.06);
-  border: 1px solid rgba(99, 102, 241, 0.15);
+  padding: 7px 10px;
+  background: rgba(99, 102, 241, 0.05);
+  border: 1px solid rgba(99, 102, 241, 0.12);
   border-radius: 8px;
   text-decoration: none;
   transition: background 0.15s ease, border-color 0.15s ease;
-  cursor: pointer;
 }
 
 .sourceItem:hover {
-  background: rgba(99, 102, 241, 0.12);
-  border-color: rgba(99, 102, 241, 0.35);
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.3);
 }
 
 .sourceContent {
@@ -52,7 +61,7 @@
 }
 
 .sourceTitle {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 600;
   color: var(--accent, #6366f1);
   white-space: nowrap;
@@ -61,7 +70,7 @@
 }
 
 .sourceExcerpt {
-  font-size: 0.72rem;
+  font-size: 0.70rem;
   color: var(--text-muted, #8e8ea0);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -79,15 +88,4 @@
 
 .sourceItem:hover .sourceLink {
   color: var(--accent, #6366f1);
-}
-
-/* Light mode */
-@media (prefers-color-scheme: light) {
-  .sourceItem {
-    background: rgba(99, 102, 241, 0.04);
-    border-color: rgba(99, 102, 241, 0.2);
-  }
-  .sourceItem:hover {
-    background: rgba(99, 102, 241, 0.09);
-  }
 }

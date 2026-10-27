@@ -7,7 +7,6 @@ const chatRoutes = require('./routes/chat');
 const userRoutes = require('./routes/users');
 const knowledgeRoutes = require('./routes/knowledge');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
-const { startScheduler } = require('./services/syncService');
 
 const app = express();
 
@@ -50,9 +49,14 @@ app.use(notFound);
 app.use(errorHandler);
 
 // ─── Start knowledge sync scheduler ──────────────────────────────────────────
-// Only start in production or when explicitly enabled
-if (process.env.NODE_ENV === 'production' || process.env.ENABLE_SYNC_SCHEDULER === 'true') {
-  startScheduler();
+// Only runs locally when explicitly enabled — NOT on Vercel serverless
+if (process.env.ENABLE_SYNC_SCHEDULER === 'true' && process.env.NODE_ENV !== 'production') {
+  try {
+    const { startScheduler } = require('./services/syncService');
+    startScheduler();
+  } catch (err) {
+    console.warn('[Scheduler] Could not start scheduler:', err.message);
+  }
 }
 
 module.exports = app;

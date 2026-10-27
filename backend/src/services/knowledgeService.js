@@ -196,12 +196,18 @@ async function loadAllChunks() {
   if (cached) return cached;
 
   console.log('[Knowledge] Loading all chunks from Firestore...');
-  const snapshot = await db.collection(CHUNKS_COL).get();
+
+  // Fetch without embeddings first (for keyword search & metadata)
+  // Embeddings are large (1536 floats) — only load when needed for semantic search
+  const snapshot = await db.collection(CHUNKS_COL)
+    .select('chunkId', 'sourceUrl', 'title', 'text', 'chunkIndex', 'crawledAt', 'indexedAt')
+    .get();
+
   const chunks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
   _chunkCache = chunks;
   _cacheLoadedAt = Date.now();
-  console.log(`[Knowledge] Loaded ${chunks.length} chunks into cache.`);
+  console.log(`[Knowledge] Loaded ${chunks.length} chunks into cache (no embeddings).`);
   return chunks;
 }
 

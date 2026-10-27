@@ -150,7 +150,13 @@ async function buildRAGContext(message, baseSystemPrompt) {
   }
 
   try {
-    const chunks = await retrieveRelevantChunks(message, 8);
+    // Timeout guard: if knowledge retrieval takes >6s, fall back gracefully
+    const retrievalPromise = retrieveRelevantChunks(message, 8);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Knowledge retrieval timeout')), 6000)
+    );
+
+    const chunks = await Promise.race([retrievalPromise, timeoutPromise]);
 
     // Filter by minimum relevance (keyword matches always included)
     const relevantChunks = chunks.filter(

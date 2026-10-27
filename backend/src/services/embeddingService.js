@@ -119,11 +119,22 @@ function keywordSearch(query, chunks, topK = 4) {
 
 /**
  * Hybrid search: combines semantic + keyword results, deduplicates by chunkId.
+ * Falls back to keyword-only if chunks don't have embeddings loaded.
  */
 async function hybridSearch(query, chunks, topK = 8) {
+  const hasEmbeddings = chunks.some((c) => c.embedding && c.embedding.length > 0);
+
+  const keywordResults = keywordSearch(query, chunks, topK);
+
+  if (!hasEmbeddings) {
+    // Keyword-only mode (Vercel serverless — embeddings not loaded to save memory)
+    console.log('[Search] Keyword-only mode (no embeddings in cache)');
+    return keywordResults.slice(0, topK);
+  }
+
   const [semantic, keyword] = await Promise.all([
     semanticSearch(query, chunks, topK),
-    Promise.resolve(keywordSearch(query, chunks, Math.ceil(topK / 2))),
+    Promise.resolve(keywordResults),
   ]);
 
   const seen = new Set();
