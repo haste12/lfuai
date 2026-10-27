@@ -2,13 +2,9 @@
  * syncService.js
  * Orchestrates the full crawl → index pipeline.
  * Runs on a schedule (default: every 24 hours) and can be triggered manually.
- * Uses node-cron for scheduling.
+ * All heavy imports (crawler, PDF, cron) are lazy — safe for Vercel serverless.
  */
-
-const cron = require('node-cron');
-const { crawlLFU, fetchPage } = require('./crawlerService');
-const { processPdfUrl } = require('./pdfService');
-const { indexPage, getAllSourcesMeta, logSync, getKnowledgeStats } = require('./knowledgeService');
+const { indexPage, getAllSourcesMeta, logSync } = require('./knowledgeService');
 
 let _syncRunning = false;
 let _syncJob = null;
@@ -28,6 +24,10 @@ async function runSync({ triggeredBy = 'scheduled', forceReindex = false } = {})
     console.log('[Sync] Already running — skipping.');
     return { status: 'skipped', reason: 'already_running' };
   }
+
+  // Lazy-load heavy modules only when sync actually runs
+  const { crawlLFU } = require('./crawlerService');
+  const { processPdfUrl } = require('./pdfService');
 
   _syncRunning = true;
   const startedAt = new Date().toISOString();
@@ -122,6 +122,7 @@ async function runSync({ triggeredBy = 'scheduled', forceReindex = false } = {})
  */
 async function resyncUrl(url) {
   try {
+    const { fetchPage } = require('./crawlerService');
     const page = await fetchPage(url);
     const n = await indexPage(page, true);
     return { url, chunksAdded: n, status: 'ok' };
@@ -132,7 +133,7 @@ async function resyncUrl(url) {
 
 /**
  * Start the scheduled synchronization job.
- * Called once at server startup.
+ * node-cron is loaded lazily here — safe for Vercel serverless.
  */
 function startScheduler() {
   if (_syncJob) {
@@ -140,6 +141,8 @@ function startScheduler() {
     return;
   }
 
+  // Lazy require — node-cron only loads when scheduler is explicitly started
+  const cron = require('node-cron');
   const schedule = DEFAULT_CRON;
   console.log(`[Sync] Starting scheduler with cron: "${schedule}"`);
 
