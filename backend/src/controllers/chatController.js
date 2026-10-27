@@ -3,26 +3,28 @@ const { checkAndIncrementLimit, getRemainingInfo } = require('../services/rateLi
 
 /**
  * POST /api/chat
+ * Supports both authenticated users (userId = Firebase UID)
+ * and guests (userId = 'guest' or 'guest:<sessionId>').
  */
 async function sendMessage(req, res, next) {
   try {
-    const { message, userId, userName, history } = req.body;
+    const { message, userId, userName, history, sessionId } = req.body;
 
     if (!message?.trim()) {
       return res.status(400).json({ error: 'Message is required.' });
     }
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID is required.' });
-    }
 
-    // Rate limit check
-    const { allowed, message: limitMessage } = await checkAndIncrementLimit(userId);
+    // Accept guest sessions — use sessionId or fall back to 'guest'
+    const effectiveUserId = userId || (sessionId ? `guest:${sessionId}` : 'guest');
+
+    // Rate limit check (currently unlimited for all users)
+    const { allowed, message: limitMessage } = await checkAndIncrementLimit(effectiveUserId);
     if (!allowed) {
       return res.status(429).json({ error: limitMessage });
     }
 
     // Get AI reply
-    const reply = await getAIResponse(message.trim(), userName, history);
+    const reply = await getAIResponse(message.trim(), userName || null, history || []);
 
     return res.json({ reply, limitInfo: limitMessage });
   } catch (err) {

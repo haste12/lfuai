@@ -8,9 +8,19 @@ export function ThemeProvider({ children }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem("lfu-theme") || "light";
-    setTheme(saved);
-    document.documentElement.setAttribute("data-theme", saved);
+    // Respect saved preference, fall back to OS preference, then light
+    const saved = localStorage.getItem("lfu-theme");
+    let initial;
+    if (saved === "dark" || saved === "light") {
+      initial = saved;
+    } else {
+      // Detect OS preference
+      initial = window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    }
+    setTheme(initial);
+    document.documentElement.setAttribute("data-theme", initial);
     setMounted(true);
   }, []);
 
@@ -21,10 +31,17 @@ export function ThemeProvider({ children }) {
     document.documentElement.setAttribute("data-theme", next);
   };
 
-  if (!mounted) return null;
+  const setThemeValue = (value) => {
+    if (value !== "light" && value !== "dark") return;
+    setTheme(value);
+    localStorage.setItem("lfu-theme", value);
+    document.documentElement.setAttribute("data-theme", value);
+  };
 
+  // Render children even before mounted to avoid layout flicker;
+  // the data-theme attribute is set synchronously in the script block below
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme: setThemeValue, mounted }}>
       {children}
     </ThemeContext.Provider>
   );

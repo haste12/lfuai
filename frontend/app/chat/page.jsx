@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -10,6 +10,7 @@ import {
   doc,
   setDoc,
   deleteDoc,
+  updateDoc,
   collection,
   query,
   orderBy,
@@ -17,257 +18,457 @@ import {
 } from "firebase/firestore";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import IntroModal from "../../components/IntroModal";
 import styles from "./page.module.css";
 
-/* ─── SVG Icons ─────────────────────────────────────────────────────────── */
-const BotIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="11" width="18" height="11" rx="2"/>
-    <path d="M12 2v4M8 2h8"/>
-    <circle cx="9" cy="16" r="1" fill="currentColor" stroke="none"/>
-    <circle cx="15" cy="16" r="1" fill="currentColor" stroke="none"/>
-    <path d="M9 20h6"/>
+// ─── Session Storage Keys ─────────────────────────────────────────────────────
+const GUEST_SESSION_KEY = "lfu-guest-session-id";
+const GUEST_CONV_KEY = "lfu-guest-conversation";
+
+function getOrCreateGuestSessionId() {
+  if (typeof window === "undefined") return "guest";
+  let id = sessionStorage.getItem(GUEST_SESSION_KEY);
+  if (!id) {
+    id = "gs_" + Date.now() + "_" + Math.random().toString(36).slice(2, 9);
+    sessionStorage.setItem(GUEST_SESSION_KEY, id);
+  }
+  return id;
+}
+
+function saveGuestConversation(messages) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(GUEST_CONV_KEY, JSON.stringify(messages));
+  } catch (_) {}
+}
+
+function loadGuestConversation() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = sessionStorage.getItem(GUEST_CONV_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function clearGuestConversation() {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(GUEST_CONV_KEY);
+}
+
+// ─── SVG Icons ─────────────────────────────────────────────────────────────
+const Icon = ({ d, size = 16, strokeWidth = 1.8 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+    <path d={d} />
   </svg>
 );
 
+const PlusIcon = () => <Icon d="M12 5v14M5 12h14" size={16} strokeWidth={2} />;
 const SendIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
   </svg>
 );
-
-const LoadingIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-    <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/>
-  </svg>
-);
-
 const MenuIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M3 12h18M3 6h18M3 18h18"/>
+    <path d="M3 12h18M3 6h18M3 18h18" />
+  </svg>
+);
+const SunIcon = () => <Icon d="M12 7a5 5 0 100 10A5 5 0 0012 7zM12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" size={16} strokeWidth={1.8} />;
+const MoonIcon = () => <Icon d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z" size={16} strokeWidth={1.8} />;
+const TrashIcon = () => <Icon d="M3 6h18M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" size={14} strokeWidth={1.8} />;
+const EditIcon = () => <Icon d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" size={14} strokeWidth={1.8} />;
+const ChatIcon = () => <Icon d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" size={14} strokeWidth={1.8} />;
+const SearchIcon = () => <Icon d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z" size={14} strokeWidth={1.8} />;
+const CopyIcon = () => <Icon d="M8 4H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2M8 4a2 2 0 002 2h4a2 2 0 002-2M8 4a2 2 0 012-2h4a2 2 0 012 2" size={14} strokeWidth={1.8} />;
+const CheckIcon = () => <Icon d="M20 6L9 17l-5-5" size={14} strokeWidth={2.2} />;
+const XIcon = () => <Icon d="M18 6L6 18M6 6l12 12" size={16} strokeWidth={2} />;
+const MoreIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+    <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
+  </svg>
+);
+const UserIcon = () => <Icon d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" size={14} strokeWidth={1.8} />;
+const SettingsIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+  </svg>
+);
+const GlobeIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+  </svg>
+);
+const LogOutIcon = () => <Icon d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" size={14} strokeWidth={1.8} />;
+const StopIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+    <rect x="3" y="3" width="18" height="18" rx="2"/>
   </svg>
 );
 
-const TrashIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 6h18M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+// ─── LFU Logo ─────────────────────────────────────────────────────────────────
+const LFULogo = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+    <rect width="40" height="40" rx="10" fill="#2563eb"/>
+    <path d="M10 10h6v14h10v6H10V10z" fill="white" opacity="0.9"/>
+    <path d="M28 10h-6v8h6v-8z" fill="white" opacity="0.7"/>
   </svg>
 );
 
-const PlusIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-    <path d="M12 5v14M5 12h14"/>
-  </svg>
-);
-
-const ChatIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-  </svg>
-);
-
-const SunIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <circle cx="12" cy="12" r="4"/>
-    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
-  </svg>
-);
-
-const MoonIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/>
-  </svg>
-);
-
-const ArrowIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 18l6-6-6-6"/>
-  </svg>
-);
-
-const LFULogoIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-    <circle cx="12" cy="12" r="10" stroke="white" strokeWidth="1.5" opacity="0.8"/>
-    <path d="M8 8l4 8 4-8" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M7 12h10" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.6"/>
-  </svg>
-);
-
-/* ─── Typing Indicator ───────────────────────────────────────────────────── */
+// ─── Typing indicator ─────────────────────────────────────────────────────────
 function TypingIndicator() {
   return (
-    <div className={`${styles.message} ${styles.bot}`}>
-      <div className={`${styles.avatar} ${styles.avatarBot}`}><BotIcon /></div>
-      <div className={`${styles.bubble} ${styles.bubbleBot}`} style={{ display: "flex", alignItems: "center", gap: "4px", padding: "14px 18px" }}>
-        <span className={styles.typingDot} style={{ animationDelay: "0s" }} />
-        <span className={styles.typingDot} style={{ animationDelay: "0.2s" }} />
-        <span className={styles.typingDot} style={{ animationDelay: "0.4s" }} />
+    <div className={styles.typingRow}>
+      <div className={styles.botAvatar}><LFULogo size={20} /></div>
+      <div className={styles.typingBubble}>
+        <span className={styles.dot} style={{ animationDelay: "0s" }} />
+        <span className={styles.dot} style={{ animationDelay: "0.15s" }} />
+        <span className={styles.dot} style={{ animationDelay: "0.3s" }} />
       </div>
     </div>
   );
 }
 
-/* ─── LFU Logo SVG ───────────────────────────────────────────────────────── */
-const LFULogo = ({ size = 22 }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="chatLogoGrad" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#6c63ff"/>
-        <stop offset="1" stopColor="#00b4d8"/>
-      </linearGradient>
-    </defs>
-    <path d="M50 5C25.1 5 5 23.4 5 46c0 11.8 5.2 22.5 13.6 30L14 92l18.5-8.4C37.1 85 43.4 86 50 86c24.9 0 45-18.4 45-40S74.9 5 50 5z" fill="url(#chatLogoGrad)"/>
-    <circle cx="50" cy="46" r="22" fill="white" opacity="0.9"/>
-    <path d="M50 28c0 0-3 9-9 12 6 3 9 12 9 12s3-9 9-12c-6-3-9-12-9-12z" fill="url(#chatLogoGrad)"/>
-  </svg>
-);
+// ─── Copy button ──────────────────────────────────────────────────────────────
+function CopyButton({ text, className }) {
+  const [copied, setCopied] = useState(false);
+  const { t } = useLang();
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (_) {}
+  };
+  return (
+    <button className={className || styles.copyBtn} onClick={handleCopy} title={copied ? t.copied : t.copy}>
+      {copied ? <CheckIcon /> : <CopyIcon />}
+    </button>
+  );
+}
 
-/* ─── Main Page ──────────────────────────────────────────────────────────── */
+// ─── Message Item ─────────────────────────────────────────────────────────────
+function MessageItem({ msg, userInitial }) {
+  const isUser = msg.role === "user";
+  return (
+    <div className={`${styles.messageRow} ${isUser ? styles.userRow : styles.botRow}`}>
+      {!isUser && (
+        <div className={styles.botAvatar}><LFULogo size={20} /></div>
+      )}
+      <div className={`${styles.messageBubble} ${isUser ? styles.userBubble : styles.botBubble}`}>
+        {isUser ? (
+          <p className={styles.userText}>{msg.text}</p>
+        ) : (
+          <div className={styles.markdownBody}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                code({ inline, className, children, ...props }) {
+                  const content = String(children).replace(/\n$/, "");
+                  if (inline) {
+                    return <code className={styles.inlineCode} {...props}>{children}</code>;
+                  }
+                  return (
+                    <div className={styles.codeBlock}>
+                      <div className={styles.codeHeader}>
+                        <span className={styles.codeLang}>{className?.replace("language-", "") || "code"}</span>
+                        <CopyButton text={content} className={styles.codeHeaderCopy} />
+                      </div>
+                      <pre className={styles.pre}><code {...props}>{children}</code></pre>
+                    </div>
+                  );
+                },
+              }}
+            >{msg.text}</ReactMarkdown>
+          </div>
+        )}
+        {!isUser && (
+          <div className={styles.messageActions}>
+            <CopyButton text={msg.text} />
+          </div>
+        )}
+      </div>
+      {isUser && (
+        <div className={styles.userAvatar}>{userInitial}</div>
+      )}
+    </div>
+  );
+}
+
+// ─── Confirm Dialog ───────────────────────────────────────────────────────────
+function ConfirmDialog({ isOpen, title, body, onConfirm, onCancel, confirmLabel, confirmDanger }) {
+  const { t } = useLang();
+  if (!isOpen) return null;
+  return (
+    <div className={styles.dialogOverlay} onClick={onCancel}>
+      <div className={styles.dialog} onClick={e => e.stopPropagation()}>
+        <h3 className={styles.dialogTitle}>{title}</h3>
+        {body && <p className={styles.dialogBody}>{body}</p>}
+        <div className={styles.dialogActions}>
+          <button className={`btn btn-ghost ${styles.dialogBtn}`} onClick={onCancel}>{t.cancel}</button>
+          <button
+            className={`btn ${confirmDanger ? "btn-danger" : "btn-primary"} ${styles.dialogBtn}`}
+            onClick={onConfirm}
+          >{confirmLabel || t.confirm}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Save Guest Conversation Dialog ──────────────────────────────────────────
+function SaveConvDialog({ isOpen, onSave, onSkip }) {
+  const { t } = useLang();
+  if (!isOpen) return null;
+  return (
+    <div className={styles.dialogOverlay}>
+      <div className={styles.dialog}>
+        <div className={styles.dialogIcon}>
+          <ChatIcon />
+        </div>
+        <h3 className={styles.dialogTitle}>{t.saveConvTitle}</h3>
+        <p className={styles.dialogBody}>{t.saveConvBody}</p>
+        <div className={styles.dialogActions}>
+          <button className={`btn btn-ghost ${styles.dialogBtn}`} onClick={onSkip}>{t.skipSave}</button>
+          <button className={`btn btn-primary ${styles.dialogBtn}`} onClick={onSave}>{t.saveConv}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Settings Panel ───────────────────────────────────────────────────────────
+function SettingsPanel({ isOpen, onClose }) {
+  const { t, lang, setLang, translations } = useLang();
+  const { theme, setTheme } = useTheme();
+  if (!isOpen) return null;
+  return (
+    <div className={styles.settingsOverlay} onClick={onClose}>
+      <div className={styles.settingsPanel} onClick={e => e.stopPropagation()}>
+        <div className={styles.settingsHeader}>
+          <h3 className={styles.settingsTitle}>{t.settings}</h3>
+          <button className={styles.closeBtn} onClick={onClose}><XIcon /></button>
+        </div>
+
+        <div className={styles.settingsSection}>
+          <p className={styles.settingLabel}>{t.appearance}</p>
+          <div className={styles.themeOptions}>
+            {["light", "dark"].map(opt => (
+              <button
+                key={opt}
+                className={`${styles.themeOption} ${theme === opt ? styles.themeOptionActive : ""}`}
+                onClick={() => setTheme(opt)}
+              >
+                {opt === "light" ? <SunIcon /> : <MoonIcon />}
+                <span>{opt === "light" ? t.lightMode : t.darkMode}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className={styles.settingsSection}>
+          <p className={styles.settingLabel}>{t.language}</p>
+          <div className={styles.langOptions}>
+            {Object.entries(translations).map(([code, tr]) => (
+              <button
+                key={code}
+                className={`${styles.langOption} ${lang === code ? styles.langOptionActive : ""}`}
+                onClick={() => setLang(code)}
+              >
+                {tr.langLabel}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Chat Page ───────────────────────────────────────────────────────────
 export default function ChatPage() {
-  const { user, userData, loading } = useAuth();
+  const { user, userData, loading, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { t } = useLang();
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
-  const [showIntro, setShowIntro] = useState(false);
 
+  // UI state
+  const [mounted, setMounted] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Chat state
   const [messages, setMessages] = useState([]);
   const [chats, setChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [limitInfo, setLimitInfo] = useState("");
   const [error, setError] = useState("");
+
+  // Conversation action state
+  const [contextMenu, setContextMenu] = useState({ open: false, chatId: null, x: 0, y: 0 });
+  const [renaming, setRenaming] = useState({ chatId: null, value: "" });
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, chatId: null });
+
+  // Guest-to-auth state
+  const [pendingGuestMessages, setPendingGuestMessages] = useState(null);
+  const [saveConvOpen, setSaveConvOpen] = useState(false);
+
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
+  const guestSessionId = useRef(null);
 
-  // Prevent hydration mismatch
+  // ─── Mount ─────────────────────────────────────────────────────────────────
   useEffect(() => {
+    guestSessionId.current = getOrCreateGuestSessionId();
     setMounted(true);
   }, []);
 
+  // ─── Load data on auth state change ───────────────────────────────────────
   useEffect(() => {
-    if (!loading && !user) router.push("/login");
+    if (!mounted || loading) return;
 
-    // Show intro for first-time users
-    const introDone = localStorage.getItem("lfu-intro-done");
-    if (user && !introDone) {
-      setShowIntro(true);
-    }
+    if (user) {
+      // Authenticated: load Firebase history
+      loadAuthHistory();
 
-    const loadHistory = async () => {
-      if (user) {
-        try {
-          const q = query(
-            collection(db, "users", user.uid, "chats"),
-            orderBy("updatedAt", "desc"),
-          );
-          const snap = await getDocs(q);
-          let loadedChats = [];
-          snap.forEach((docSnap) => {
-            loadedChats.push({ id: docSnap.id, ...docSnap.data() });
-          });
-          setChats(loadedChats);
-
-          if (loadedChats.length > 0) {
-            const latest = loadedChats[0];
-            const updatedTime = latest.updatedAt?.toMillis
-              ? latest.updatedAt.toMillis()
-              : latest.updatedAt?.seconds * 1000 || Date.now();
-            const timeDiff = Date.now() - updatedTime;
-            if (timeDiff > 4 * 60 * 1000) {
-              setActiveChatId(null);
-              setMessages([]);
-            } else {
-              setActiveChatId(latest.id);
-              setMessages(latest.messages || []);
-            }
-          } else {
-            setActiveChatId(null);
-            setMessages([]);
-          }
-        } catch (err) {
-          console.error("Failed to load chat history", err);
-          setActiveChatId(null);
-          setMessages([]);
-        }
+      // Check if guest had a conversation to offer saving
+      const guestMsgs = loadGuestConversation();
+      if (guestMsgs.length > 0) {
+        setPendingGuestMessages(guestMsgs);
+        setSaveConvOpen(true);
       }
-    };
-    loadHistory();
-  }, [user, loading, router]);
+    } else {
+      // Guest: load from sessionStorage
+      const saved = loadGuestConversation();
+      setMessages(saved);
+      setChats([]);
+      setActiveChatId(null);
+    }
+  }, [user, loading, mounted]);
 
+  // ─── Load Firebase history ────────────────────────────────────────────────
+  const loadAuthHistory = async () => {
+    if (!user) return;
+    try {
+      const q = query(
+        collection(db, "users", user.uid, "chats"),
+        orderBy("updatedAt", "desc")
+      );
+      const snap = await getDocs(q);
+      const loaded = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setChats(loaded);
+      // Don't auto-open a conversation — show welcome screen
+      setMessages([]);
+      setActiveChatId(null);
+    } catch (err) {
+      console.error("Failed to load history", err);
+    }
+  };
+
+  // ─── Scroll to bottom ─────────────────────────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending]);
 
-  const autoResizeTextarea = () => {
+  // ─── Auto-resize textarea ─────────────────────────────────────────────────
+  const autoResize = () => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
   };
 
-  const sendMessage = async () => {
-    const trimmed = input.trim();
+  // ─── Close context menu on outside click ──────────────────────────────────
+  useEffect(() => {
+    const handler = () => setContextMenu(m => ({ ...m, open: false }));
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, []);
+
+  // ─── Send message ─────────────────────────────────────────────────────────
+  const sendMessage = useCallback(async (overrideText) => {
+    const trimmed = (overrideText || input).trim();
     if (!trimmed || sending) return;
 
-    const userMsg = { id: Date.now().toString(), role: "user", text: trimmed };
-    const newMessagesAfterUser = [...messages, userMsg];
-    setMessages(newMessagesAfterUser);
+    const userMsg = { id: `${Date.now()}_u`, role: "user", text: trimmed };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setInput("");
     setSending(true);
     setError("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
+    // Persist guest session immediately
+    if (!user) saveGuestConversation(nextMessages);
+
     try {
-      const res = await chatApi.sendMessage(trimmed, user.uid, userData?.displayName, messages);
-      const botMsg = { id: Date.now().toString() + "_bot", role: "bot", text: res.reply };
-      const finalMessages = [...newMessagesAfterUser, botMsg];
+      const res = await chatApi.sendMessage(
+        trimmed,
+        user?.uid || null,
+        userData?.displayName || null,
+        messages,
+        user ? null : guestSessionId.current
+      );
+
+      const botMsg = { id: `${Date.now()}_b`, role: "bot", text: res.reply };
+      const finalMessages = [...nextMessages, botMsg];
       setMessages(finalMessages);
 
       if (user) {
-        let currentChatId = activeChatId;
-        let isNewChat = false;
-        if (!currentChatId) {
-          currentChatId = Date.now().toString();
-          setActiveChatId(currentChatId);
-          isNewChat = true;
-        }
-        const title = isNewChat
-          ? trimmed.substring(0, 30) + (trimmed.length > 30 ? "..." : "")
-          : undefined;
-        const chatDocRef = doc(db, "users", user.uid, "chats", currentChatId);
-        const saveData = { messages: finalMessages, updatedAt: new Date() };
-        if (title) saveData.title = title;
-        await setDoc(chatDocRef, saveData, { merge: true });
-
-        setChats((prev) => {
-          let exists = false;
-          let newChats = prev.map((c) => {
-            if (c.id === currentChatId) {
-              exists = true;
-              return { ...c, messages: finalMessages, updatedAt: new Date(), title: title || c.title };
-            }
-            return c;
-          });
-          if (!exists) {
-            newChats = [{ id: currentChatId, title: title || "New Chat", messages: finalMessages, updatedAt: new Date() }, ...prev];
-          }
-          return newChats.sort((a, b) => b.updatedAt - a.updatedAt);
-        });
+        // Save to Firebase for authenticated users
+        await persistToFirebase(finalMessages, trimmed);
+      } else {
+        // Save to sessionStorage for guests
+        saveGuestConversation(finalMessages);
       }
-
-      if (res.limitInfo) setLimitInfo(res.limitInfo);
     } catch (err) {
-      setError(err.message || "Something went wrong. Please try again.");
+      setError(err.message || t.errorGeneric);
     } finally {
       setSending(false);
     }
+  }, [input, messages, sending, user, userData, t]);
+
+  // ─── Persist to Firebase ──────────────────────────────────────────────────
+  const persistToFirebase = async (finalMessages, firstMessage) => {
+    if (!user) return;
+    let currentId = activeChatId;
+    let isNew = false;
+
+    if (!currentId) {
+      currentId = `chat_${Date.now()}`;
+      setActiveChatId(currentId);
+      isNew = true;
+    }
+
+    const title = isNew
+      ? firstMessage.substring(0, 40) + (firstMessage.length > 40 ? "…" : "")
+      : undefined;
+
+    const docRef = doc(db, "users", user.uid, "chats", currentId);
+    const saveData = { messages: finalMessages, updatedAt: new Date() };
+    if (title) saveData.title = title;
+    if (isNew) saveData.createdAt = new Date();
+
+    await setDoc(docRef, saveData, { merge: true });
+
+    setChats(prev => {
+      const existing = prev.find(c => c.id === currentId);
+      if (existing) {
+        return prev.map(c =>
+          c.id === currentId
+            ? { ...c, messages: finalMessages, updatedAt: new Date() }
+            : c
+        ).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      }
+      return [{ id: currentId, title: title || "New Chat", messages: finalMessages, updatedAt: new Date(), createdAt: new Date() }, ...prev];
+    });
   };
 
+  // ─── Keyboard handler ─────────────────────────────────────────────────────
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -275,41 +476,122 @@ export default function ChatPage() {
     }
   };
 
+  // ─── New chat ─────────────────────────────────────────────────────────────
   const startNewChat = () => {
     setActiveChatId(null);
     setMessages([]);
-    setLimitInfo("");
     setError("");
+    if (!user) clearGuestConversation();
+    setSidebarOpen(false);
   };
 
-  const loadSpecificChat = (chatId) => {
-    const chat = chats.find((c) => c.id === chatId);
-    if (chat) {
-      setActiveChatId(chatId);
-      setMessages(chat.messages);
+  // ─── Load specific chat ───────────────────────────────────────────────────
+  const loadChat = (chatId) => {
+    const chat = chats.find(c => c.id === chatId);
+    if (!chat) return;
+    setActiveChatId(chatId);
+    setMessages(chat.messages || []);
+    setError("");
+    setSidebarOpen(false);
+  };
+
+  // ─── Rename conversation ──────────────────────────────────────────────────
+  const startRename = (chatId, currentTitle) => {
+    setRenaming({ chatId, value: currentTitle });
+    setContextMenu(m => ({ ...m, open: false }));
+  };
+
+  const commitRename = async () => {
+    if (!renaming.chatId || !renaming.value.trim() || !user) return;
+    try {
+      await updateDoc(doc(db, "users", user.uid, "chats", renaming.chatId), {
+        title: renaming.value.trim(),
+      });
+      setChats(prev => prev.map(c =>
+        c.id === renaming.chatId ? { ...c, title: renaming.value.trim() } : c
+      ));
+    } catch (err) {
+      console.error("Rename failed", err);
+    }
+    setRenaming({ chatId: null, value: "" });
+  };
+
+  // ─── Delete conversation ──────────────────────────────────────────────────
+  const confirmDelete = (chatId) => {
+    setDeleteConfirm({ open: true, chatId });
+    setContextMenu(m => ({ ...m, open: false }));
+  };
+
+  const executeDelete = async () => {
+    const { chatId } = deleteConfirm;
+    setDeleteConfirm({ open: false, chatId: null });
+    if (!chatId || !user) return;
+    try {
+      await deleteDoc(doc(db, "users", user.uid, "chats", chatId));
+      setChats(prev => prev.filter(c => c.id !== chatId));
+      if (activeChatId === chatId) startNewChat();
+    } catch (err) {
+      console.error("Delete failed", err);
     }
   };
 
-  const clearChat = async () => {
-    if (user && activeChatId) {
-      try {
-        await deleteDoc(doc(db, "users", user.uid, "chats", activeChatId));
-        setChats((prev) => prev.filter((c) => c.id !== activeChatId));
-      } catch (err) {
-        console.error("Failed to delete chat", err);
-      }
+  // ─── Save guest conversation to account ──────────────────────────────────
+  const saveGuestToAccount = async () => {
+    setSaveConvOpen(false);
+    if (!user || !pendingGuestMessages || pendingGuestMessages.length === 0) return;
+    try {
+      const firstUserMsg = pendingGuestMessages.find(m => m.role === "user");
+      const title = firstUserMsg
+        ? firstUserMsg.text.substring(0, 40) + (firstUserMsg.text.length > 40 ? "…" : "")
+        : "Saved conversation";
+      const newChatId = `chat_${Date.now()}`;
+      await setDoc(doc(db, "users", user.uid, "chats", newChatId), {
+        title,
+        messages: pendingGuestMessages,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      setChats(prev => [{ id: newChatId, title, messages: pendingGuestMessages, createdAt: new Date(), updatedAt: new Date() }, ...prev]);
+      setActiveChatId(newChatId);
+      setMessages(pendingGuestMessages);
+    } catch (err) {
+      console.error("Failed to save guest conversation", err);
     }
+    clearGuestConversation();
+    setPendingGuestMessages(null);
+  };
+
+  const skipGuestSave = () => {
+    setSaveConvOpen(false);
+    clearGuestConversation();
+    setPendingGuestMessages(null);
     startNewChat();
   };
 
-  const handleIntroComplete = () => {
-    setShowIntro(false);
+  // ─── Log out ──────────────────────────────────────────────────────────────
+  const handleLogout = async () => {
+    await logout();
+    setMessages([]);
+    setChats([]);
+    setActiveChatId(null);
   };
 
-  if (!mounted || loading) {
+  // ─── Filtered chats for search ────────────────────────────────────────────
+  const filteredChats = searchQuery
+    ? chats.filter(c => (c.title || "").toLowerCase().includes(searchQuery.toLowerCase()))
+    : chats;
+
+  // ─── Suggestion chips ─────────────────────────────────────────────────────
+  const suggestions = [t.suggestion1, t.suggestion2, t.suggestion3, t.suggestion4];
+
+  // ─── User initial ─────────────────────────────────────────────────────────
+  const userInitial = (userData?.displayName || user?.email || "?")[0]?.toUpperCase() || "?";
+
+  // ─── Loading screen ───────────────────────────────────────────────────────
+  if (!mounted) {
     return (
       <div className={styles.loadingScreen}>
-        <div className={styles.loadingLogo}><LFULogo size={48} /></div>
+        <LFULogo size={48} />
         <p className={styles.loadingText}>{t.loadingText}</p>
       </div>
     );
@@ -317,197 +599,280 @@ export default function ChatPage() {
 
   return (
     <>
-      {/* First-time intro modal */}
-      {showIntro && <IntroModal onComplete={handleIntroComplete} />}
+      {/* Dialogs */}
+      <SaveConvDialog isOpen={saveConvOpen} onSave={saveGuestToAccount} onSkip={skipGuestSave} />
+      <ConfirmDialog
+        isOpen={deleteConfirm.open}
+        title={t.deleteConfirm}
+        body={t.deleteConfirmBody}
+        onConfirm={executeDelete}
+        onCancel={() => setDeleteConfirm({ open: false, chatId: null })}
+        confirmLabel={t.delete}
+        confirmDanger
+      />
+      <SettingsPanel isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       <div className={styles.layout}>
         {/* Sidebar overlay (mobile) */}
-        <div
-          className={`${styles.sidebarOverlay} ${sidebarOpen ? styles.sidebarOverlayOpen : ""}`}
-          onClick={() => setSidebarOpen(false)}
-        />
+        {sidebarOpen && (
+          <div className={styles.sidebarOverlay} onClick={() => setSidebarOpen(false)} />
+        )}
 
-        {/* Sidebar */}
-        <aside className={`${styles.sidebar} ${sidebarOpen ? styles.sidebarOpen : styles.sidebarClosed}`}>
-
-          {/* Brand header */}
-          <div className={styles.sidebarHeader}>
+        {/* ─── Sidebar ───────────────────────────────────────────────────── */}
+        <aside className={`${styles.sidebar} ${sidebarOpen ? styles.sidebarOpen : ""}`}>
+          {/* Brand */}
+          <div className={styles.sidebarTop}>
             <div className={styles.sidebarBrand}>
-              <div className={styles.brandLogo}><LFULogo size={22} /></div>
-              <div>
-                <p className={styles.brandName}>LFU AI</p>
-                <p className={styles.brandSub}>University Assistant</p>
-              </div>
+              <LFULogo size={28} />
+              <span className={styles.brandName}>LFU AI</span>
             </div>
-            <button
-              className={styles.newChatBtn}
-              onClick={() => { startNewChat(); setSidebarOpen(false); }}
-            >
+            <button className={styles.newChatBtn} onClick={startNewChat}>
               <PlusIcon />
-              {t.newConversation}
+              <span>{t.newChat}</span>
             </button>
           </div>
 
-          {/* Chat history */}
-          <div className={styles.sidebarTop}>
-            {chats.length > 0 && <p className={styles.chatListLabel}>{t.recentChats}</p>}
-            <div className={styles.chatList}>
-              {chats.map((chat) => (
-                <div
-                  key={chat.id}
-                  className={`${styles.chatItem} ${chat.id === activeChatId ? styles.activeChatItem : ""}`}
-                  onClick={() => { loadSpecificChat(chat.id); setSidebarOpen(false); }}
-                >
-                  <span className={styles.chatItemIcon}><ChatIcon /></span>
-                  <span className={styles.chatTitle}>{chat.title || t.newChat}</span>
-                </div>
-              ))}
+          {/* Search (authenticated only) */}
+          {user && (
+            <div className={styles.searchWrap}>
+              <SearchIcon />
+              <input
+                type="text"
+                className={styles.searchInput}
+                placeholder={t.searchChats}
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
             </div>
-            {limitInfo && (
-              <div className={styles.limitCard}>
-                <p className={styles.limitLabel}>{t.usage}</p>
-                <p className={styles.limitText}>{limitInfo}</p>
+          )}
+
+          {/* Conversation list */}
+          <div className={styles.chatList}>
+            {user ? (
+              filteredChats.length > 0 ? (
+                <>
+                  <p className={styles.sectionLabel}>{t.recentChats}</p>
+                  {filteredChats.map(chat => (
+                    <div key={chat.id} className={styles.chatItemWrap}>
+                      {renaming.chatId === chat.id ? (
+                        <form onSubmit={e => { e.preventDefault(); commitRename(); }} className={styles.renameForm}>
+                          <input
+                            className={styles.renameInput}
+                            value={renaming.value}
+                            onChange={e => setRenaming(r => ({ ...r, value: e.target.value }))}
+                            autoFocus
+                            onBlur={commitRename}
+                          />
+                        </form>
+                      ) : (
+                        <button
+                          className={`${styles.chatItem} ${chat.id === activeChatId ? styles.chatItemActive : ""}`}
+                          onClick={() => loadChat(chat.id)}
+                        >
+                          <ChatIcon />
+                          <span className={styles.chatTitle}>{chat.title || t.newChat}</span>
+                          <button
+                            className={styles.chatMenuBtn}
+                            onClick={e => {
+                              e.stopPropagation();
+                              setContextMenu({ open: true, chatId: chat.id, x: e.clientX, y: e.clientY });
+                            }}
+                          >
+                            <MoreIcon />
+                          </button>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <p className={styles.emptyChats}>{searchQuery ? "No results" : t.noChatsYet}</p>
+              )
+            ) : (
+              // Guest sidebar content
+              <div className={styles.guestNotice}>
+                <p className={styles.guestNoticeText}>{t.guestNotice}</p>
+                <button className={`btn btn-primary ${styles.guestAuthBtn}`} onClick={() => router.push("/login")}>
+                  {t.login}
+                </button>
+                <button className={`btn btn-ghost ${styles.guestAuthBtn}`} onClick={() => router.push("/register")}>
+                  {t.register}
+                </button>
               </div>
             )}
           </div>
 
-          {/* User footer */}
-          <div className={styles.sidebarBottom}>
-            <div className={styles.sidebarUser} onClick={() => router.push("/profile")}>
-              <div className={styles.avatarLg}>
-                {userData?.displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "?"}
+          {/* Sidebar footer */}
+          <div className={styles.sidebarFooter}>
+            <button className={styles.sidebarFooterBtn} onClick={() => setSettingsOpen(true)}>
+              <SettingsIcon />
+              <span>{t.settings}</span>
+            </button>
+            <button className={styles.sidebarFooterBtn} onClick={toggleTheme}>
+              {theme === "light" ? <MoonIcon /> : <SunIcon />}
+              <span>{theme === "light" ? t.darkMode : t.lightMode}</span>
+            </button>
+
+            {user ? (
+              <div className={styles.userCard}>
+                <div className={styles.userAvatar}>{userInitial}</div>
+                <div className={styles.userInfo} onClick={() => router.push("/profile")}>
+                  <p className={styles.userName}>{userData?.displayName || user?.email?.split("@")[0]}</p>
+                  <p className={styles.userEmail}>{user?.email}</p>
+                </div>
+                <button className={styles.logoutBtn} onClick={handleLogout} title={t.logout}>
+                  <LogOutIcon />
+                </button>
               </div>
-              <div style={{ overflow: "hidden", flex: 1 }}>
-                <p className={styles.sidebarName}>{userData?.displayName || "Student"}</p>
-                <p className={styles.sidebarEmail}>{user?.email}</p>
+            ) : (
+              <div className={styles.guestCard}>
+                <div className={styles.guestAvatarIcon}><UserIcon /></div>
+                <span className={styles.guestLabel}>Guest</span>
+                <button className={`btn btn-primary`} style={{ fontSize: "12px", padding: "6px 12px" }} onClick={() => router.push("/login")}>
+                  {t.login}
+                </button>
               </div>
-              <span className={styles.sidebarUserArrow}><ArrowIcon /></span>
-            </div>
+            )}
           </div>
         </aside>
 
-        {/* Chat area */}
+        {/* Context menu */}
+        {contextMenu.open && (
+          <div
+            className={styles.contextMenu}
+            style={{ top: Math.min(contextMenu.y, window.innerHeight - 100), left: Math.min(contextMenu.x, window.innerWidth - 160) }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              className={styles.contextMenuItem}
+              onClick={() => {
+                const chat = chats.find(c => c.id === contextMenu.chatId);
+                startRename(contextMenu.chatId, chat?.title || "");
+              }}
+            >
+              <EditIcon />
+              <span>{t.rename}</span>
+            </button>
+            <button
+              className={`${styles.contextMenuItem} ${styles.contextMenuItemDanger}`}
+              onClick={() => confirmDelete(contextMenu.chatId)}
+            >
+              <TrashIcon />
+              <span>{t.delete}</span>
+            </button>
+          </div>
+        )}
+
+        {/* ─── Main Chat Area ──────────────────────────────────────────────── */}
         <div className={styles.chatArea}>
-
           {/* Header */}
-          <div className={styles.chatHeader}>
-            <div className={styles.headerLeft}>
-              <button className={styles.hamburgerBtn} onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle Sidebar">
-                <MenuIcon />
-              </button>
-              <div className={styles.headerBadge}>
-                <div className={styles.headerAvatarWrap}>
-                  <div className={styles.headerAvatar}><LFULogo size={20} /></div>
-                  <span className={styles.onlinePing} />
-                </div>
-                <div>
-                  <p className={styles.headerTitle}>LFU AI Assistant</p>
-                  <p className={styles.headerSub}>● {t.online}</p>
-                </div>
-              </div>
+          <header className={styles.chatHeader}>
+            <button
+              className={styles.menuBtn}
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label="Toggle sidebar"
+            >
+              <MenuIcon />
+            </button>
+            <div className={styles.headerCenter}>
+              <LFULogo size={22} />
+              <span className={styles.headerTitle}>LFU AI</span>
+              <span className={styles.onlineDot} />
             </div>
-
-            <div className={styles.headerRight}>
-              {/* Theme toggle */}
+            <div className={styles.headerActions}>
               <button
-                className={styles.themeBtn}
+                className={styles.iconBtn}
                 onClick={toggleTheme}
                 aria-label="Toggle theme"
-                title={theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
+                title={theme === "light" ? t.darkMode : t.lightMode}
               >
                 {theme === "light" ? <MoonIcon /> : <SunIcon />}
               </button>
-              {/* Clear chat */}
-              <button className={styles.mobileClearBtn} onClick={clearChat} aria-label="Clear chat" title="Clear Chat">
-                <TrashIcon />
-              </button>
+              {messages.length > 0 && (
+                <button
+                  className={styles.iconBtn}
+                  onClick={startNewChat}
+                  aria-label="New chat"
+                  title={t.newChat}
+                >
+                  <PlusIcon />
+                </button>
+              )}
             </div>
-          </div>
+          </header>
 
           {/* Messages */}
-          <div className={styles.messages}>
-            {messages.length === 0 && (
-              <div className={styles.emptyState}>
-                <div className={styles.emptyLogo}><LFULogo size={56} /></div>
-                <h2 className={styles.emptyTitle}>LFU AI Assistant</h2>
-                <p className={styles.emptySubtitle}>
-                  {userData?.displayName ? `Welcome, ${userData.displayName}!` : "Welcome!"} How can I help you today?
-                </p>
+          <main className={styles.messages} id="chat-messages">
+            {messages.length === 0 ? (
+              <div className={styles.welcomeScreen}>
+                <div className={styles.welcomeLogo}>
+                  <LFULogo size={52} />
+                </div>
+                <h1 className={styles.welcomeTitle}>{t.welcomeTitle}</h1>
+                <p className={styles.welcomeSubtitle}>{t.welcomeSubtitle}</p>
                 <div className={styles.suggestions}>
-                  {[
-                    "What courses does LFU offer?",
-                    "Who are the department heads?",
-                    "Tell me about LFU university",
-                    "What are the student services?",
-                  ].map((s) => (
+                  {suggestions.map(s => (
                     <button
                       key={s}
-                      className={styles.suggestionChip}
-                      onClick={() => { setInput(s); textareaRef.current?.focus(); }}
+                      className={styles.suggestionBtn}
+                      onClick={() => sendMessage(s)}
                     >
                       {s}
                     </button>
                   ))}
                 </div>
               </div>
-            )}
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`${styles.message} ${msg.role === "user" ? styles.user : styles.bot}`}
-              >
-                {msg.role === "bot" && (
-                  <div className={`${styles.avatar} ${styles.avatarBot}`}><BotIcon /></div>
-                )}
-                <div className={`${styles.bubble} ${msg.role === "user" ? styles.bubbleUser : styles.bubbleBot}`}>
-                  {msg.role === "bot" ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
-                  ) : (
-                    msg.text
-                  )}
-                </div>
-                {msg.role === "user" && (
-                  <div className={`${styles.avatar} ${styles.avatarUser}`}>
-                    {userData?.displayName?.[0]?.toUpperCase() || "?"}
+            ) : (
+              <div className={styles.conversationBody}>
+                {messages.map(msg => (
+                  <MessageItem
+                    key={msg.id}
+                    msg={msg}
+                    userInitial={userInitial}
+                  />
+                ))}
+                {sending && <TypingIndicator />}
+                {error && (
+                  <div className={styles.errorBar}>
+                    <XIcon />
+                    <span>{error}</span>
+                    <button className={styles.retryBtn} onClick={() => sendMessage()}>
+                      {t.retry}
+                    </button>
                   </div>
                 )}
-              </div>
-            ))}
-
-            {sending && <TypingIndicator />}
-            {error && (
-              <div className={styles.errorMsg}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-                {error}
+                <div ref={bottomRef} />
               </div>
             )}
-            <div ref={bottomRef} />
-          </div>
+          </main>
 
-          {/* Input */}
-          <div className={styles.inputArea}>
-            <div className={styles.inputRow}>
-              <textarea
-                ref={textareaRef}
-                className={styles.textarea}
-                placeholder={t.placeholder}
-                value={input}
-                onChange={(e) => { setInput(e.target.value); autoResizeTextarea(); }}
-                onKeyDown={handleKeyDown}
-                rows={1}
-                disabled={sending}
-              />
-              <button
-                className={`${styles.sendBtn} ${!input.trim() || sending ? styles.sendBtnDisabled : ""}`}
-                onClick={sendMessage}
-                disabled={!input.trim() || sending}
-                aria-label="Send message"
-              >
-                {sending ? <LoadingIcon /> : <SendIcon />}
-              </button>
+          {/* Composer */}
+          <footer className={styles.composerArea}>
+            <div className={styles.composerWrap}>
+              <div className={`${styles.composerBox} ${sending ? styles.composerBoxSending : ""}`}>
+                <textarea
+                  ref={textareaRef}
+                  className={styles.composerInput}
+                  placeholder={t.placeholder}
+                  value={input}
+                  onChange={e => { setInput(e.target.value); autoResize(); }}
+                  onKeyDown={handleKeyDown}
+                  rows={1}
+                  disabled={sending}
+                  aria-label="Message input"
+                />
+                <button
+                  className={`${styles.sendBtn} ${(!input.trim() && !sending) ? styles.sendBtnDisabled : ""}`}
+                  onClick={sending ? undefined : () => sendMessage()}
+                  disabled={!input.trim() && !sending}
+                  aria-label={t.send}
+                >
+                  {sending ? <StopIcon /> : <SendIcon />}
+                </button>
+              </div>
+              <p className={styles.disclaimer}>{t.disclaimer}</p>
             </div>
-            <p className={styles.inputHint}>{t.enterToSend}</p>
-          </div>
+          </footer>
         </div>
       </div>
     </>

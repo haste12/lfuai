@@ -1,5 +1,12 @@
-import { redirect } from 'next/navigation';
+'use client';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
+// Root page just redirects to /chat (works for both guests and authenticated users)
 export default function HomePage() {
-  redirect('/chat');
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/chat');
+  }, [router]);
+  return null;
 }

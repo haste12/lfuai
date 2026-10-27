@@ -12,10 +12,18 @@ async function apiFetch(path, options = {}) {
 }
 
 export const chatApi = {
-  sendMessage: (message, userId, userName, history = []) =>
+  /**
+   * Send a message to the AI backend.
+   * @param {string} message - The user's message
+   * @param {string|null} userId - Firebase UID for authenticated users, null for guests
+   * @param {string|null} userName - Display name (optional)
+   * @param {Array} history - Previous messages for context
+   * @param {string|null} sessionId - Guest session ID (used when userId is null)
+   */
+  sendMessage: (message, userId, userName, history = [], sessionId = null) =>
     apiFetch('/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ message, userId, userName, history }),
+      body: JSON.stringify({ message, userId, userName, history, sessionId }),
     }),
 
   getRemaining: (userId) => apiFetch(`/api/chat/remaining/${userId}`),

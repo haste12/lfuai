@@ -5,37 +5,44 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 import styles from './page.module.css';
 
-/* LFU Logo — chat bubble with sparkle */
-function LFULogo({ size = 60 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="loginLogoGrad" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#6c63ff"/>
-          <stop offset="1" stopColor="#00b4d8"/>
-        </linearGradient>
-      </defs>
-      <path d="M50 5C25.1 5 5 23.4 5 46c0 11.8 5.2 22.5 13.6 30L14 92l18.5-8.4C37.1 85 43.4 86 50 86c24.9 0 45-18.4 45-40S74.9 5 50 5z" fill="url(#loginLogoGrad)"/>
-      <circle cx="50" cy="46" r="22" fill="white" opacity="0.9"/>
-      <path d="M50 28c0 0-3 9-9 12 6 3 9 12 9 12s3-9 9-12c-6-3-9-12-9-12z" fill="url(#loginLogoGrad)"/>
-    </svg>
-  );
+const LFULogo = ({ size = 40 }) => (
+  <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+    <rect width="40" height="40" rx="10" fill="#2563eb"/>
+    <path d="M10 10h6v14h10v6H10V10z" fill="white" opacity="0.9"/>
+    <path d="M28 10h-6v8h6v-8z" fill="white" opacity="0.7"/>
+  </svg>
+);
+
+const GoogleIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 48 48">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+  </svg>
+);
+
+function getFriendlyError(err) {
+  const map = {
+    'auth/popup-closed-by-user': 'Sign-in popup was closed. Please try again.',
+    'auth/popup-blocked': 'Popup was blocked by your browser. Allow popups and try again.',
+    'auth/cancelled-popup-request': 'Another sign-in is in progress.',
+    'auth/network-request-failed': 'Network error. Check your connection.',
+  };
+  return map[err?.code] || err?.message || 'Sign in failed. Please try again.';
 }
 
 export default function LoginPage() {
-  const { login, signInWithGoogle } = useAuth();
+  const { signInWithGoogle } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleGoogle = async () => {
     setLoading(true);
     setError('');
     try {
-      await login(email, password);
+      await signInWithGoogle();
       router.push('/chat');
     } catch (err) {
       setError(getFriendlyError(err));
@@ -44,115 +51,44 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      await signInWithGoogle();
-      router.push('/chat');
-    } catch (err) {
-      setError(err.message || 'Google Sign-In failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <main className={styles.main}>
-      {/* Ambient glow */}
-      <div
-        className="glow-orb"
-        style={{ width: 400, height: 400, background: 'rgba(108,99,255,0.1)', top: '5%', left: '50%', transform: 'translateX(-50%)' }}
-      />
-
       <div className={styles.card}>
-        {/* Header with LFU Logo */}
         <div className={styles.cardHeader}>
-          <div className={styles.logoWrap}>
-            <LFULogo size={64} />
-          </div>
-          <h1 className={styles.title}>Welcome back</h1>
-          <p className={styles.subtitle}>Sign in to your LFU AI account</p>
+          <LFULogo size={44} />
+          <h1 className={styles.title}>Welcome to LFU AI</h1>
+          <p className={styles.subtitle}>Sign in with your Google account to continue</p>
         </div>
 
-        {error && <div className={styles.errorBox}>{error}</div>}
+        {error && (
+          <div className={styles.errorBox} role="alert">{error}</div>
+        )}
 
-        <form onSubmit={handleSubmit} className={styles.form}>
-          <div className={styles.field}>
-            <label htmlFor="email" className={styles.label}>Email address</label>
-            <input
-              id="email"
-              type="email"
-              className="input"
-              placeholder="you@lfu.edu.krd"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
-          </div>
+        <button
+          className={styles.googleBtn}
+          onClick={handleGoogle}
+          disabled={loading}
+          id="google-signin-btn"
+        >
+          {loading ? (
+            <span className={styles.spinner} />
+          ) : (
+            <GoogleIcon />
+          )}
+          <span>{loading ? 'Signing in…' : 'Continue with Google'}</span>
+        </button>
 
-          <div className={styles.field}>
-            <label htmlFor="password" className={styles.label}>Password</label>
-            <input
-              id="password"
-              type="password"
-              className="input"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-          </div>
+        <div className={styles.divider}><span>or</span></div>
 
-          <button
-            type="submit"
-            className={`btn btn-primary ${styles.submitBtn}`}
-            disabled={loading}
-          >
-            {loading ? 'Signing in...' : 'Sign In →'}
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', margin: '4px 0', color: 'var(--text-faint)' }}>
-            <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border)' }}></div>
-            <span style={{ padding: '0 12px', fontSize: '12px' }}>or</span>
-            <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border)' }}></div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleGoogleSignIn}
-            className={styles.googleBtn}
-            disabled={loading}
-          >
-            <img
-              src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-              alt="Google logo"
-              style={{ width: '18px', height: '18px' }}
-            />
-            Sign in with Google
-          </button>
-        </form>
+        <Link href="/chat" className={styles.guestLink}>
+          Continue as guest →
+        </Link>
 
         <p className={styles.footer}>
-          Don&apos;t have an account?{' '}
-          <Link href="/register" className={styles.link}>Create one</Link>
+          By continuing, you agree to our{' '}
+          <span className={styles.footerMuted}>Terms of Service</span>
         </p>
       </div>
     </main>
   );
-}
-
-function getFriendlyError(err) {
-  console.error('Firebase Login Error:', err);
-  const errors = {
-    'auth/invalid-email': 'Please enter a valid email address.',
-    'auth/user-not-found': 'No account found with this email.',
-    'auth/wrong-password': 'Incorrect password. Please try again.',
-    'auth/too-many-requests': 'Too many attempts. Please try again later.',
-    'auth/invalid-credential': 'Invalid email or password.',
-    'auth/invalid-api-key': 'API Key Error: Please restart your Next.js server so it loads the new .env.local file!',
-  };
-  return errors[err.code] || err.message || 'Login failed. Please try again.';
 }
