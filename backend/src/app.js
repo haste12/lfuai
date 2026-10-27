@@ -5,7 +5,9 @@ const morgan = require('morgan');
 
 const chatRoutes = require('./routes/chat');
 const userRoutes = require('./routes/users');
+const knowledgeRoutes = require('./routes/knowledge');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
+const { startScheduler } = require('./services/syncService');
 
 const app = express();
 
@@ -41,9 +43,16 @@ app.get('/health', (req, res) => {
 // ─── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api/chat', chatRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/knowledge', knowledgeRoutes);
 
 // ─── Error Handlers ───────────────────────────────────────────────────────────
 app.use(notFound);
 app.use(errorHandler);
+
+// ─── Start knowledge sync scheduler ──────────────────────────────────────────
+// Only start in production or when explicitly enabled
+if (process.env.NODE_ENV === 'production' || process.env.ENABLE_SYNC_SCHEDULER === 'true') {
+  startScheduler();
+}
 
 module.exports = app;

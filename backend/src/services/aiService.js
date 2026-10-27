@@ -1,5 +1,6 @@
 const OpenAI = require('openai');
 const { searchWeb, needsWebSearch } = require('./searchService');
+const { buildRAGContext } = require('./ragService');
 const {
   SYSTEM_PROMPT,
   getGreetingResponse,
@@ -42,16 +43,37 @@ function applyReplacements(text) {
 }
 
 // ── Main AI call ──────────────────────────────────────────────────────────────
+/**
+ * @param {string} message
+ * @param {string|null} userName
+ * @param {Array} history
+ * @returns {{ reply: string, sources: Array }}
+ */
 async function getAIResponse(message, userName, history = []) {
+  // Short-circuit for predefined responses
   const predefined = getPredefinedResponse(message, userName);
-  if (predefined) return predefined;
+  if (predefined) return { reply: predefined, sources: [] };
 
   const contextInstruction =
     '\n\nIMPORTANT: Always maintain full conversation context. When the user says something vague like "more", "continue", "go on", or asks a follow-up question, always refer back to the previous messages in this conversation and continue from where you left off. Never lose track of what was previously discussed.';
 
-  const systemContent = userName
+  const baseSystemContent = userName
     ? SYSTEM_PROMPT + `\n\nThe user's name is ${userName}. Address them by name occasionally.` + contextInstruction
     : SYSTEM_PROMPT + contextInstruction;
+
+  // ── RAG context retrieval ─────────────────────────────────────────────────
+  let systemContent = baseSystemContent;
+  let sources = [];
+
+  try {
+    const ragResult = await buildRAGContext(message, baseSystemContent);
+    if (ragResult.useRAG && ragResult.ragSystemPrompt) {
+      systemContent = ragResult.ragSystemPrompt;
+      sources = ragResult.sources || [];
+    }
+  } catch (ragErr) {
+    console.warn('[AI] RAG context build failed (falling back to base):', ragErr.message);
+  }
 
   // Build messages array in OpenAI chat format
   const messages = [{ role: 'system', content: systemContent }];
@@ -67,12 +89,11 @@ async function getAIResponse(message, userName, history = []) {
   // Add the current user message
   messages.push({ role: 'user', content: message });
 
-  // ── Web search (if query needs live data) ──────────────────────────────────
-  if (needsWebSearch(message)) {
+  // ── Web search (only for non-LFU general queries needing live data) ───────
+  if (sources.length === 0 && needsWebSearch(message)) {
     console.log('[Search] Fetching web results for:', message);
     const searchResults = await searchWeb(message);
     if (searchResults) {
-      // Inject search results as an assistant context hint before the final user message
       messages.splice(messages.length - 1, 0, {
         role: 'system',
         content: `🌐 Web search results for context (use this to answer accurately):\n\n${searchResults}\n\nUse the above search results to answer the user's question accurately. Always mention if you used web search data.`,
@@ -88,12 +109,12 @@ async function getAIResponse(message, userName, history = []) {
     const completion = await client.chat.completions.create({
       model: modelId,
       messages,
-      temperature: 0.7,
-      max_tokens: 800,
+      temperature: sources.length > 0 ? 0.3 : 0.7, // lower temp for RAG answers
+      max_tokens: 1000,
     });
 
     const reply = completion.choices[0]?.message?.content ?? '';
-    return applyReplacements(reply.trim());
+    return { reply: applyReplacements(reply.trim()), sources };
   } catch (err) {
     console.error('[AI] OpenAI request failed:', err.message);
     throw new Error('The AI model is currently unavailable. Please try again later.');

@@ -18,6 +18,7 @@ import {
 } from "firebase/firestore";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import SourceCitations from "../../components/SourceCitations";
 import styles from "./page.module.css";
 
 // ─── Session Storage Keys ─────────────────────────────────────────────────────
@@ -182,6 +183,10 @@ function MessageItem({ msg, userInitial }) {
                 },
               }}
             >{msg.text}</ReactMarkdown>
+            {/* Source citations from RAG knowledge base */}
+            {msg.sources && msg.sources.length > 0 && (
+              <SourceCitations sources={msg.sources} />
+            )}
           </div>
         )}
         {!isUser && (
@@ -411,7 +416,12 @@ export default function ChatPage() {
         user ? null : guestSessionId.current
       );
 
-      const botMsg = { id: `${Date.now()}_b`, role: "bot", text: res.reply };
+      const botMsg = {
+        id: `${Date.now()}_b`,
+        role: "bot",
+        text: res.reply || res,
+        sources: res.sources || [],
+      };
       const finalMessages = [...nextMessages, botMsg];
       setMessages(finalMessages);
 
