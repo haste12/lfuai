@@ -581,8 +581,6 @@ export default function ChatPage() {
     ? chats.filter(c => (c.title || "").toLowerCase().includes(searchQuery.toLowerCase()))
     : chats;
 
-  // ─── Suggestion chips ─────────────────────────────────────────────────────
-  const suggestions = [t.suggestion1, t.suggestion2, t.suggestion3, t.suggestion4];
 
   // ─── User initial ─────────────────────────────────────────────────────────
   const userInitial = (userData?.displayName || user?.email || "?")[0]?.toUpperCase() || "?";
@@ -810,17 +808,6 @@ export default function ChatPage() {
                 </div>
                 <h1 className={styles.welcomeTitle}>{t.welcomeTitle}</h1>
                 <p className={styles.welcomeSubtitle}>{t.welcomeSubtitle}</p>
-                <div className={styles.suggestions}>
-                  {suggestions.map(s => (
-                    <button
-                      key={s}
-                      className={styles.suggestionBtn}
-                      onClick={() => sendMessage(s)}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
               </div>
             ) : (
               <div className={styles.conversationBody}>
@@ -870,7 +857,6 @@ export default function ChatPage() {
                   {sending ? <StopIcon /> : <SendIcon />}
                 </button>
               </div>
-              <p className={styles.disclaimer}>{t.disclaimer}</p>
             </div>
           </footer>
         </div>
