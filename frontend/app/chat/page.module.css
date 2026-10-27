@@ -1234,3 +1234,76 @@
 [data-lang-dir="rtl"] .newChatBtn {
   flex-direction: row-reverse;
 }
+
+/* ─── Streaming cursor (blinking | after text) ───────────────────────────── */
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+.streamCursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--accent, #6366f1);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  animation: cursorBlink 0.8s ease-in-out infinite;
+}
+
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .streamCursor { animation: none; opacity: 1; }
+}
+
+/* ─── Stop Generation button ─────────────────────────────────────────────── */
+.stopBtnWrap {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0 2px;
+}
+
+.stopGenBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  background: var(--bg-secondary, rgba(255,255,255,0.05));
+  border: 1px solid var(--border, rgba(255,255,255,0.1));
+  border-radius: 20px;
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.stopGenBtn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+/* ─── Spinner icon animation ──────────────────────────────────────────────── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.spinIcon {
+  animation: spin 0.8s linear infinite;
+}
+
+/* ─── RTL message text (auto-set by dir attribute) ───────────────────────── */
+.markdownBody[dir="rtl"],
+.userText[dir="rtl"] {
+  text-align: right;
+  unicode-bidi: embed;
+}
+
+.markdownBody[dir="rtl"] ul,
+.markdownBody[dir="rtl"] ol {
+  padding-right: 1.5em;
+  padding-left: 0;
+}

@@ -10,7 +10,7 @@ const SYSTEM_PROMPT =
   "7. Answering questions about any general topics or subjects, including those not related to LFU\n" +
   "8. Providing information about other universities and educational institutions worldwide\n\n" +
   "You are knowledgeable about ALL subjects and topics, not just those related to LFU. You're capable of answering questions about other universities, general knowledge, scientific topics, current events, and any other information the user might request.\n\n" +
-  "If you don't know the answer to a question, you'll be honest about your limitations but make use of web search capabilities to find relevant information. When using information from web searches, cite your sources.\n\n" +
+  "If asked about recent LFU events, news, activities, or conferences: USE the university knowledge base and retrieved evidence provided to you — do NOT say you lack internet access or live browsing. If no evidence is in context, honestly say what information is available and direct them to lfu.edu.krd.\n\n" +
   "=====================\n" +
   "CRITICAL FORMATTING INSTRUCTION:\n" +
   "When providing information about staff, developers, or departments, you MUST ALWAYS USE highly professional Markdown formatting! \n" +
@@ -219,10 +219,12 @@ const CREATOR_TRIGGERS = [
 const REPLACEMENTS = {
   OpenAI: 'LFU AI',
   ChatGPT: 'LFU AI Assistant',
+  Gemini: 'LFU AI',
+  'Google AI': 'LFU AI',
   'AI language model': 'LFU AI Assistant',
   'language model': 'LFU AI Assistant',
   'computer program': 'LFU AI Assistant',
-  'artificial intelligence': 'LFU AI Assistant',
+  'large language model': 'LFU AI Assistant',
 };
 
 module.exports = {

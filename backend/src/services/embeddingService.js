@@ -1,52 +1,54 @@
 /**
  * embeddingService.js
- * Generates and compares text embeddings using the OpenAI Embeddings API.
+ * Generates and compares text embeddings using Google's Gemini Embedding API.
+ * Uses text-embedding-004 (768 dimensions) — fast, free tier available.
  * Stores/retrieves embeddings from Firestore (no separate vector DB needed).
- * Uses cosine similarity for semantic search.
  */
 
-const OpenAI = require('openai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-let _client = null;
+let _genAI = null;
 function getClient() {
-  if (!_client) {
-    _client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  if (!_genAI) {
+    _genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   }
-  return _client;
+  return _genAI;
 }
 
-const EMBEDDING_MODEL = 'text-embedding-3-small'; // 1536 dimensions, cost-effective
+// Google's text-embedding-004: 768 dimensions, free-tier friendly
+const EMBEDDING_MODEL = 'text-embedding-004';
 
 /**
  * Generate an embedding vector for a text string.
- * Truncates input to avoid token limits (8191 tokens max for this model).
  */
 async function generateEmbedding(text) {
-  const truncated = text.slice(0, 25000); // ~6250 tokens, well within limit
+  const truncated = text.slice(0, 20000); // Safe limit for Google embeddings
   const client = getClient();
-  const res = await client.embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: truncated,
-  });
-  return res.data[0].embedding; // float[]
+  const model = client.getGenerativeModel({ model: EMBEDDING_MODEL });
+  const result = await model.embedContent(truncated);
+  return result.embedding.values; // float[]
 }
 
 /**
  * Batch-generate embeddings for multiple texts.
- * OpenAI supports up to 2048 inputs per call; we batch safely at 100.
+ * Google Embedding API doesn't have a native batch endpoint in the JS SDK,
+ * so we parallelize with a concurrency limit of 5 to be respectful.
  */
 async function generateEmbeddingsBatch(texts) {
   const client = getClient();
+  const model = client.getGenerativeModel({ model: EMBEDDING_MODEL });
+  const CONCURRENCY = 5;
   const results = [];
-  const BATCH_SIZE = 50;
 
-  for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-    const batch = texts.slice(i, i + BATCH_SIZE).map((t) => t.slice(0, 25000));
-    const res = await client.embeddings.create({
-      model: EMBEDDING_MODEL,
-      input: batch,
-    });
-    results.push(...res.data.map((d) => d.embedding));
+  for (let i = 0; i < texts.length; i += CONCURRENCY) {
+    const batch = texts.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map(async (text) => {
+        const result = await model.embedContent(text.slice(0, 20000));
+        return result.embedding.values;
+      })
+    );
+    results.push(...batchResults);
   }
   return results;
 }
@@ -69,12 +71,6 @@ function cosineSimilarity(a, b) {
 
 /**
  * Rank a list of chunk objects by semantic similarity to a query.
- * Each chunk must have an `embedding` field (float[]).
- *
- * @param {string} query
- * @param {Array<{embedding: number[], ...}>} chunks
- * @param {number} topK
- * @returns {Array} top-K chunks sorted by score descending
  */
 async function semanticSearch(query, chunks, topK = 6) {
   if (!chunks || chunks.length === 0) return [];
@@ -93,7 +89,6 @@ async function semanticSearch(query, chunks, topK = 6) {
 
 /**
  * Keyword / exact-match search on chunk text.
- * Useful for instructor names, emails, course codes, department names.
  */
 function keywordSearch(query, chunks, topK = 4) {
   const terms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
@@ -103,7 +98,6 @@ function keywordSearch(query, chunks, topK = 4) {
     const haystack = (c.text + ' ' + (c.title || '') + ' ' + (c.url || '')).toLowerCase();
     let score = 0;
     for (const term of terms) {
-      // Count occurrences
       const regex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
       const matches = haystack.match(regex);
       if (matches) score += matches.length;
@@ -123,7 +117,6 @@ function keywordSearch(query, chunks, topK = 4) {
  */
 async function hybridSearch(query, chunks, topK = 8) {
   const hasEmbeddings = chunks.some((c) => c.embedding && c.embedding.length > 0);
-
   const keywordResults = keywordSearch(query, chunks, topK);
 
   if (!hasEmbeddings) {
@@ -139,7 +132,6 @@ async function hybridSearch(query, chunks, topK = 8) {
 
   const seen = new Set();
   const combined = [];
-
   for (const chunk of [...keyword, ...semantic]) {
     const id = chunk.chunkId || chunk.url;
     if (!seen.has(id)) {
@@ -147,7 +139,6 @@ async function hybridSearch(query, chunks, topK = 8) {
       combined.push(chunk);
     }
   }
-
   return combined.slice(0, topK);
 }
 

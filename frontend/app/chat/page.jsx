@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -108,6 +108,11 @@ const StopIcon = () => (
     <rect x="3" y="3" width="18" height="18" rx="2"/>
   </svg>
 );
+const SpinnerIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className={styles.spinIcon}>
+    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+  </svg>
+);
 
 // ─── LFU Logo ─────────────────────────────────────────────────────────────────
 const LFULogo = ({ size = 24 }) => (
@@ -150,9 +155,34 @@ function CopyButton({ text, className }) {
   );
 }
 
+// ─── Text direction detector ──────────────────────────────────────────────────
+function detectDir(text) {
+  if (!text) return 'ltr';
+  const rtlPattern = /[\u0600-\u06FF\u0750-\u077F]/;
+  return rtlPattern.test(text.slice(0, 80)) ? 'rtl' : 'ltr';
+}
+
+// ─── Streaming message bubble ─────────────────────────────────────────────────
+// Shows text as it streams in with a blinking cursor
+function StreamingBubble({ text }) {
+  const dir = detectDir(text);
+  return (
+    <div className={`${styles.messageRow} ${styles.botRow}`}>
+      <div className={styles.botAvatar}><LFULogo size={20} /></div>
+      <div className={`${styles.messageBubble} ${styles.botBubble}`}>
+        <div className={styles.markdownBody} dir={dir}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{text || ''}</ReactMarkdown>
+          <span className={styles.streamCursor} aria-hidden="true" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Message Item ─────────────────────────────────────────────────────────────
 function MessageItem({ msg, userInitial }) {
   const isUser = msg.role === "user";
+  const dir = detectDir(msg.text);
   return (
     <div className={`${styles.messageRow} ${isUser ? styles.userRow : styles.botRow}`}>
       {!isUser && (
@@ -160,9 +190,9 @@ function MessageItem({ msg, userInitial }) {
       )}
       <div className={`${styles.messageBubble} ${isUser ? styles.userBubble : styles.botBubble}`}>
         {isUser ? (
-          <p className={styles.userText}>{msg.text}</p>
+          <p className={styles.userText} dir={dir}>{msg.text}</p>
         ) : (
-          <div className={styles.markdownBody}>
+          <div className={styles.markdownBody} dir={dir}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
@@ -311,7 +341,11 @@ export default function ChatPage() {
   const [activeChatId, setActiveChatId] = useState(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [streaming, setStreaming] = useState(false);    // true while tokens arrive
+  const [streamText, setStreamText] = useState("");     // accumulated stream text
+  const [streamSources, setStreamSources] = useState([]);
   const [error, setError] = useState("");
+  const abortRef = useRef(null); // AbortController for stop generation
 
   // Conversation action state
   const [contextMenu, setContextMenu] = useState({ open: false, chatId: null, top: 0, left: 0 });
@@ -378,7 +412,7 @@ export default function ChatPage() {
   // ─── Scroll to bottom ─────────────────────────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending]);
+  }, [messages, sending, streaming, streamText]);
 
   // ─── Auto-resize textarea ─────────────────────────────────────────────────
   const autoResize = () => {
@@ -391,10 +425,20 @@ export default function ChatPage() {
   // ─── Close context menu on outside click ──────────────────────────────────
   // (handled by backdrop overlay rendered when menu is open — see JSX)
 
-  // ─── Send message ─────────────────────────────────────────────────────────
+  // ─── Stop generation ──────────────────────────────────────────────────────
+  const stopGeneration = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+  }, []);
+
+  // ─── Send message (streaming) ─────────────────────────────────────────────
   const sendMessage = useCallback(async (overrideText) => {
     const trimmed = (overrideText || input).trim();
-    if (!trimmed || sending) return;
+    if (!trimmed || sending || streaming) return;
+
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
     const userMsg = { id: `${Date.now()}_u`, role: "user", text: trimmed };
     const nextMessages = [...messages, userMsg];
@@ -404,40 +448,132 @@ export default function ChatPage() {
     setError("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-    // Persist guest session immediately
     if (!user) saveGuestConversation(nextMessages);
 
+    // Set up AbortController for Stop button
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    let fullText = '';
+    let sources = [];
+    let streamStarted = false;
+
     try {
-      const res = await chatApi.sendMessage(
-        trimmed,
-        user?.uid || null,
-        userData?.displayName || null,
-        messages,
-        user ? null : guestSessionId.current
-      );
+      const res = await fetch(`${API_BASE}/api/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: trimmed,
+          userId: user?.uid || null,
+          userName: userData?.displayName || null,
+          history: messages,
+          sessionId: user ? null : guestSessionId.current,
+        }),
+        signal: controller.signal,
+      });
 
-      const botMsg = {
-        id: `${Date.now()}_b`,
-        role: "bot",
-        text: res.reply || res,
-        sources: res.sources || [],
-      };
-      const finalMessages = [...nextMessages, botMsg];
-      setMessages(finalMessages);
-
-      if (user) {
-        // Save to Firebase for authenticated users
-        await persistToFirebase(finalMessages, trimmed);
-      } else {
-        // Save to sessionStorage for guests
-        saveGuestConversation(finalMessages);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to connect to AI');
       }
-    } catch (err) {
-      setError(err.message || t.errorGeneric);
-    } finally {
+
+      // Start streaming phase
       setSending(false);
+      setStreaming(true);
+      setStreamText('');
+      setStreamSources([]);
+      streamStarted = true;
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // keep incomplete line
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'chunk' && event.text) {
+              fullText += event.text;
+              setStreamText(fullText);
+            } else if (event.type === 'sources') {
+              sources = event.sources || [];
+              setStreamSources(sources);
+            } else if (event.type === 'done') {
+              break;
+            } else if (event.type === 'error') {
+              throw new Error(event.message);
+            }
+          } catch (parseErr) {
+            // Skip malformed SSE lines
+          }
+        }
+      }
+
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        // User stopped generation — keep what we have
+        console.log('[Stream] Stopped by user');
+      } else {
+        // Try falling back to non-streaming
+        try {
+          setSending(true);
+          setStreaming(false);
+          const { chatApi } = await import('../../lib/api');
+          const fallback = await chatApi.sendMessage(
+            trimmed,
+            user?.uid || null,
+            userData?.displayName || null,
+            messages,
+            user ? null : guestSessionId.current
+          );
+          fullText = fallback.reply || fallback;
+          sources = fallback.sources || [];
+          setSending(false);
+          streamStarted = false; // treat as non-streaming
+        } catch (fallbackErr) {
+          setSending(false);
+          setStreaming(false);
+          setStreamText('');
+          setError(err.message || t.errorGeneric);
+          return;
+        }
+      }
     }
-  }, [input, messages, sending, user, userData, t]);
+
+    // Finalize: convert stream to a real message
+    setStreaming(false);
+    setStreamText('');
+    setStreamSources([]);
+    abortRef.current = null;
+
+    if (!fullText.trim()) {
+      // Nothing generated (e.g. stopped immediately)
+      return;
+    }
+
+    const botMsg = {
+      id: `${Date.now()}_b`,
+      role: "bot",
+      text: fullText.trim(),
+      sources,
+    };
+    const finalMessages = [...nextMessages, botMsg];
+    setMessages(finalMessages);
+
+    if (user) {
+      await persistToFirebase(finalMessages, trimmed);
+    } else {
+      saveGuestConversation(finalMessages);
+    }
+  }, [input, messages, sending, streaming, user, userData, t]);
 
   // ─── Persist to Firebase ──────────────────────────────────────────────────
   const persistToFirebase = async (finalMessages, firstMessage) => {
@@ -869,8 +1005,13 @@ export default function ChatPage() {
                     userInitial={userInitial}
                   />
                 ))}
-                {sending && <TypingIndicator />}
-                {error && (
+                {/* Sending: waiting for first token */}
+                {sending && !streaming && <TypingIndicator />}
+                {/* Streaming: tokens arriving */}
+                {streaming && (
+                  <StreamingBubble text={streamText} />
+                )}
+                {error && !streaming && (
                   <div className={styles.errorBar}>
                     <XIcon />
                     <span>{error}</span>
@@ -884,10 +1025,18 @@ export default function ChatPage() {
             )}
           </main>
 
-          {/* Composer */}
           <footer className={styles.composerArea}>
+            {/* Stop generation button — floats above the input */}
+            {streaming && (
+              <div className={styles.stopBtnWrap}>
+                <button className={styles.stopGenBtn} onClick={stopGeneration}>
+                  <StopIcon />
+                  <span>Stop generating</span>
+                </button>
+              </div>
+            )}
             <div className={styles.composerWrap}>
-              <div className={`${styles.composerBox} ${sending ? styles.composerBoxSending : ""}`}>
+              <div className={`${styles.composerBox} ${(sending || streaming) ? styles.composerBoxSending : ""}`}>
                 <textarea
                   ref={textareaRef}
                   className={styles.composerInput}
@@ -896,16 +1045,16 @@ export default function ChatPage() {
                   onChange={e => { setInput(e.target.value); autoResize(); }}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  disabled={sending}
+                  disabled={sending || streaming}
                   aria-label="Message input"
                 />
                 <button
-                  className={`${styles.sendBtn} ${(!input.trim() && !sending) ? styles.sendBtnDisabled : ""}`}
-                  onClick={sending ? undefined : () => sendMessage()}
-                  disabled={!input.trim() && !sending}
+                  className={`${styles.sendBtn} ${(!input.trim() && !sending && !streaming) ? styles.sendBtnDisabled : ""}`}
+                  onClick={() => sendMessage()}
+                  disabled={sending || streaming || !input.trim()}
                   aria-label={t.send}
                 >
-                  {sending ? <StopIcon /> : <SendIcon />}
+                  <SendIcon />
                 </button>
               </div>
             </div>

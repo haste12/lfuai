@@ -23,7 +23,6 @@
     "morgan": "^1.10.0",
     "natural": "^8.2.6",
     "node-cron": "^4.6.0",
-    "openai": "^4.28.4",
     "pdf-parse": "^2.4.5",
     "string-similarity": "^4.0.4"
   },
